@@ -599,7 +599,7 @@ const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','bmp','webp','avif','svg','
 // Thumbnail constants
 const THUMB_MAX = 640;
 const THUMB_QUALITY = 0.8;
-const THUMB_CONCURRENCY = 4;
+const THUMB_CONCURRENCY = 8;
 
 let rootHandle = null;   // FileSystemDirectoryHandle for the root
 let currentPath = [];     // path segments from root
@@ -622,6 +622,7 @@ let vsGen = 0; // virtual scroll generation
 let currentFolderCount = 0;
 let currentDirPath = '';
 let thumbQueue = [], thumbQueueIdx = 0, thumbWorkersRunning = 0;
+let thumbDoneCount = 0;   // 已完成的缩略图数（避免每次全量 filter 统计）
 let relayoutTimer = null;
 let recursiveMode = false;   // 是否递归显示所有子文件夹里的图片
 
@@ -750,7 +751,107 @@ function formatSize(bytes) {
 }
 
 // ---- Thumbnail Generation ----
+// ---- 只读文件头拿像素尺寸（不解码整图，便宜得多）----
+// 拿不到就返回 null，调用方回退到全图解码，保证不会比原来更差。
+async function readImageSize(file) {
+  try {
+    const HEAD = 262144;               // 256 KB 足够覆盖 SOF/IHDR 等头部
+    const buf = new Uint8Array(await file.slice(0, HEAD).arrayBuffer());
+    const dv = new DataView(buf.buffer);
+    const n = buf.length;
+
+    // PNG：IHDR 固定在第 16 字节
+    if (n > 24 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
+      return { w: dv.getUint32(16), h: dv.getUint32(20) };
+    }
+    // GIF
+    if (n > 10 && buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) {
+      return { w: dv.getUint16(6, true), h: dv.getUint16(8, true) };
+    }
+    // BMP
+    if (n > 26 && buf[0] === 0x42 && buf[1] === 0x4D) {
+      return { w: dv.getInt32(18, true), h: Math.abs(dv.getInt32(22, true)) };
+    }
+    // WebP
+    if (n > 30 && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) {
+      const fmt = String.fromCharCode(buf[12], buf[13], buf[14], buf[15]);
+      if (fmt === 'VP8X') {
+        return {
+          w: 1 + (buf[24] | (buf[25] << 8) | (buf[26] << 16)),
+          h: 1 + (buf[27] | (buf[28] << 8) | (buf[29] << 16)),
+        };
+      }
+      if (fmt === 'VP8 ') {
+        return { w: dv.getUint16(26, true) & 0x3fff, h: dv.getUint16(28, true) & 0x3fff };
+      }
+      if (fmt === 'VP8L') {
+        const b0 = buf[21], b1 = buf[22], b2 = buf[23], b3 = buf[24];
+        return {
+          w: 1 + (((b1 & 0x3F) << 8) | b0),
+          h: 1 + (((b3 & 0x0F) << 10) | (b2 << 2) | ((b1 & 0xC0) >> 6)),
+        };
+      }
+    }
+    // JPEG：逐个 marker 扫到 SOFn（排除 C4=DHT / C8=JPG / CC=DAC）
+    if (n > 4 && buf[0] === 0xFF && buf[1] === 0xD8) {
+      let i = 2;
+      while (i < n - 9) {
+        if (buf[i] !== 0xFF) { i++; continue; }
+        const m = buf[i + 1];
+        if (m === 0xFF) { i++; continue; }
+        if (m >= 0xD0 && m <= 0xD9) { i += 2; continue; }   // 无长度字段的 marker
+        if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) {
+          return { h: dv.getUint16(i + 5), w: dv.getUint16(i + 7) };
+        }
+        i += 2 + dv.getUint16(i + 2);                        // 跳过本段
+      }
+    }
+  } catch (e) { /* 解析失败 -> null -> 回退 */ }
+  return null;
+}
+
+function isSaneSize(s) {
+  return s && s.w > 0 && s.h > 0 && s.w < 200000 && s.h < 200000;
+}
+
 async function generateThumb(file) {
+  const declared = await readImageSize(file);
+
+  if (isSaneSize(declared)) {
+    const ow = declared.w, oh = declared.h;
+    const needResize = Math.max(ow, oh) > THUMB_MAX;
+    const portrait = oh > ow;
+    let bmp = null;
+    try {
+      // 只传一个维度，保持长宽比（两个都传会拉伸变形）
+      bmp = needResize
+        ? await createImageBitmap(file, portrait
+            ? { resizeHeight: THUMB_MAX, resizeQuality: 'high' }
+            : { resizeWidth: THUMB_MAX, resizeQuality: 'high' })
+        : await createImageBitmap(file);
+    } catch (e) {
+      bmp = null;
+    }
+
+    if (bmp) {
+      // 校验：真实解码出来的宽高比必须和文件头解析的一致，否则说明解析不可信
+      const parsedAR = ow / oh;
+      const realAR = bmp.width / bmp.height;
+      if (Math.abs(realAR - parsedAR) / parsedAR < 0.02) {
+        const scale = Math.min(1, THUMB_MAX / Math.max(ow, oh));
+        const tw = Math.max(1, Math.round(ow * scale));
+        const th = Math.max(1, Math.round(oh * scale));
+        const canvas = new OffscreenCanvas(tw, th);
+        canvas.getContext('2d').drawImage(bmp, 0, 0, tw, th);
+        bmp.close();
+        const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: THUMB_QUALITY });
+        return { blob, width: ow, height: oh };
+      }
+      bmp.close();
+    }
+  }
+
+  // 回退路径：与优化前完全一致的实现
   const bitmap = await createImageBitmap(file);
   const origW = bitmap.width, origH = bitmap.height;
   let w = origW, h = origH;
@@ -1185,6 +1286,7 @@ function startThumbWorkers() {
           const thumbResult = await getOrCreateThumb(entry.dirPath || currentDirPath, entry.file);
           if (gen !== thumbGeneration) { URL.revokeObjectURL(thumbResult.url); break; }
           entry.thumbUrl = thumbResult.url;
+          thumbDoneCount++;
           currentThumbUrls.push(thumbResult.url);
           const hadAspect = entry.width > 0;
           if (thumbResult.width) { entry.width = thumbResult.width; entry.height = thumbResult.height; entry.aspect = thumbResult.width / thumbResult.height; }
@@ -1203,7 +1305,7 @@ function startThumbWorkers() {
           if (entry._currentCardEl) entry._currentCardEl.classList.add('thumb-ready');
         }
         // Update counter
-        const done = currentImages.filter(e => e.thumbUrl || e._thumbFailed).length;
+        const done = thumbDoneCount;
         const total = currentImages.length;
         if (gen === thumbGeneration) {
           if (done < total) $counter.textContent = `正在生成缩略图 (${done}/${total})…`;
@@ -1343,6 +1445,7 @@ async function renderDirectory() {
     thumbQueue = [];
     thumbQueueIdx = 0;
     thumbWorkersRunning = 0;
+    thumbDoneCount = 0;
 
     $gallery.innerHTML = '';
 
