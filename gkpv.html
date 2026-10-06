@@ -625,6 +625,8 @@ let currentFolderCount = 0;
 let currentDirPath = '';
 let thumbQueue = [], thumbQueueIdx = 0, thumbWorkersRunning = 0;
 let thumbDoneCount = 0;   // 已完成的缩略图数（避免每次全量 filter 统计）
+let thumbFailedCount = 0; // 失败数。失败也必须计入 done，否则计数器永远追不上 total
+let thumbFailedNames = [];
 let relayoutTimer = null;
 let recursiveMode = false;   // 是否递归显示所有子文件夹里的图片
 
@@ -1412,14 +1414,29 @@ function startThumbWorkers() {
           if (!hadAspect && entry.width > 0) scheduleRelayout();
         } catch (e) {
           console.warn('Thumb failed for', entry.name, e);
+          // 关键：失败也要计数。原来这里不计数，导致只要有一张失败，
+          // done 永远到不了 total，计数器就一直停在"正在生成缩略图"。
+          thumbDoneCount++;
+          thumbFailedCount++;
+          if (thumbFailedNames.length < 50) thumbFailedNames.push(entry.name);
+          entry._thumbFailed = true;
           if (entry._currentCardEl) entry._currentCardEl.classList.add('thumb-ready');
         }
         // Update counter
         const done = thumbDoneCount;
         const total = currentImages.length;
         if (gen === thumbGeneration) {
-          if (done < total) $counter.textContent = `正在生成缩略图 (${done}/${total})…`;
-          else updateCounterLabel(total, currentFolderCount);
+          if (done < total) {
+            $counter.textContent = `正在生成缩略图 (${done}/${total})…`;
+          } else {
+            updateCounterLabel(total, currentFolderCount);
+            if (thumbFailedCount) {
+              $counter.textContent += `（${thumbFailedCount} 张缩略图生成失败）`;
+              // 悬停能看到具体是哪几张，方便排查
+              $counter.title = thumbFailedNames.join('\n');
+              $counter.style.color = 'var(--text-warning, #c8761a)';
+            }
+          }
         }
       }
       thumbWorkersRunning--;
@@ -1556,6 +1573,10 @@ async function renderDirectory() {
     thumbQueueIdx = 0;
     thumbWorkersRunning = 0;
     thumbDoneCount = 0;
+    thumbFailedCount = 0;
+    thumbFailedNames = [];
+    $counter.title = '';
+    $counter.style.color = '';
 
     $gallery.innerHTML = '';
 
