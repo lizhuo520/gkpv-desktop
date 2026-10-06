@@ -1,0 +1,1870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gkpv – gk photo viewer</title>
+<style>
+  :root {
+    --bg: #1a1a1a;
+    --bg-secondary: #252525;
+    --bg-hover: #333;
+    --text: #e0e0e0;
+    --text-muted: #888;
+    --accent: #4a9eff;
+    --accent-hover: #6bb3ff;
+    --border: #333;
+    --thumb-sm: 120px;
+    --thumb-md: 200px;
+    --thumb-lg: 320px;
+    --thumb-size: var(--thumb-md);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ---------- toolbar ---------- */
+  #toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  #toolbar .brand {
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--accent);
+    margin-right: 8px;
+    user-select: none;
+  }
+
+  #toolbar button, #toolbar select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  #toolbar button:hover, #toolbar select:hover {
+    background: var(--bg-hover);
+  }
+
+  #breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  #breadcrumbs span {
+    color: var(--text-muted);
+    user-select: none;
+  }
+  #breadcrumbs button {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  #breadcrumbs button:hover { text-decoration: underline; }
+
+  .size-group {
+    display: flex;
+    gap: 0;
+  }
+  .size-group button {
+    border-radius: 0;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .size-group button:first-child { border-radius: 6px 0 0 6px; }
+  .size-group button:last-child { border-radius: 0 6px 6px 0; }
+  .size-group button.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  /* ---------- landing ---------- */
+  #landing {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 80vh;
+    gap: 20px;
+    text-align: center;
+  }
+  #landing h1 { font-size: 48px; color: var(--accent); }
+  #landing p { color: var(--text-muted); font-size: 15px; max-width: 420px; }
+  #landing button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 14px 32px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  #landing button:hover { background: var(--accent-hover); }
+
+  /* ---------- grid ---------- */
+  #gallery {
+    display: none;
+    padding: 16px;
+  }
+
+  .dir-section {
+    margin-bottom: 24px;
+  }
+  .dir-section h3 {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--thumb-size), 1fr));
+    gap: 8px;
+  }
+
+  .card {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+    aspect-ratio: 1;
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,.5);
+  }
+  .card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .card .label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 20px 6px 6px;
+    font-size: 11px;
+    color: #fff;
+    background: linear-gradient(transparent, rgba(0,0,0,.7));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .folder-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+  }
+  .folder-card:hover { background: var(--bg-hover); }
+  .folder-card .folder-icon { font-size: 48px; line-height: 1; }
+  .folder-card .label {
+    position: static;
+    background: none;
+    color: var(--text);
+    text-align: center;
+    padding: 0 8px;
+    font-size: 13px;
+  }
+
+  /* ---------- lightbox ---------- */
+  #lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0,0,0,.92);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  #lightbox.open { display: flex; }
+
+  #lightbox img {
+    max-width: 95vw;
+    max-height: 85vh;
+    object-fit: contain;
+    border-radius: 4px;
+    user-select: none;
+    will-change: transform;
+    transform-origin: center center;
+    touch-action: none;
+  }
+  #lightbox img.zoom-in-cursor { cursor: zoom-in; }
+  #lightbox img.zoom-out-cursor { cursor: zoom-out; }
+  #lightbox img.grab-cursor { cursor: grab; }
+  #lightbox img.grabbing-cursor { cursor: grabbing; }
+
+  #lbImgPrev {
+    position: absolute;
+    pointer-events: none;
+    z-index: 205;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    will-change: opacity;
+    transform: none;
+  }
+
+  #lbZoom {
+    position: absolute;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,.7);
+    color: #fff;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity .2s;
+    pointer-events: none;
+    z-index: 210;
+  }
+  #lbZoom.visible { opacity: 1; }
+
+  .info-btn {
+    position: absolute;
+    top: 16px;
+    right: 64px;
+    background: rgba(255,255,255,.1);
+    border: none;
+    color: #fff;
+    font-size: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background .15s;
+    z-index: 210;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .info-btn:hover { background: rgba(255,255,255,.25); }
+  .info-btn.active { background: var(--accent); }
+
+  .exif-panel {
+    display: none;
+    position: absolute;
+    top: 64px;
+    right: 16px;
+    background: rgba(0,0,0,.85);
+    backdrop-filter: blur(8px);
+    border-radius: 10px;
+    padding: 16px;
+    min-width: 240px;
+    max-width: 320px;
+    color: #e0e0e0;
+    font-size: 12px;
+    z-index: 210;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  .exif-panel.open { display: block; }
+  .exif-panel .exif-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .exif-panel .exif-row:last-child { border-bottom: none; }
+  .exif-panel .exif-label { color: #888; margin-right: 12px; white-space: nowrap; }
+  .exif-panel .exif-value { text-align: right; word-break: break-word; }
+  .exif-panel .exif-heading {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin: 10px 0 4px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255,255,255,.1);
+  }
+  .exif-panel .exif-heading:first-child { margin-top: 0; border-top: none; padding-top: 0; }
+
+  #lightbox .info {
+    margin-top: 10px;
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
+    max-width: 90vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #lightbox .nav-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,.1);
+    border: none;
+    color: #fff;
+    font-size: 28px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background .15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #lightbox .nav-btn:hover { background: rgba(255,255,255,.25); }
+  #lightbox .nav-prev { left: 16px; }
+  #lightbox .nav-next { right: 16px; }
+
+  #lightbox .close-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(255,255,255,.1);
+    border: none;
+    color: #fff;
+    font-size: 22px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  #lightbox .close-btn:hover { background: rgba(255,255,255,.25); }
+
+  /* ---------- counter ---------- */
+  #counter {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* ---------- loading ---------- */
+  #loading {
+    display: none;
+    text-align: center;
+    padding: 60px;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+  #loading.show { display: block; }
+
+  .spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- sort ---------- */
+  #sortSelect { min-width: 100px; }
+
+  /* ---------- shimmer placeholder ---------- */
+  @keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-hover) 50%, var(--bg-secondary) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    z-index: 1;
+  }
+  .card.thumb-ready::before { display: none; }
+  .card.folder-card::before { display: none; }
+
+  /* ---------- thumbnail fade-in ---------- */
+  .card img {
+    opacity: 0;
+    transition: opacity .3s;
+  }
+  .card img.loaded {
+    opacity: 1;
+  }
+
+  /* ---------- layout toggle ---------- */
+  .layout-group {
+    display: flex;
+    gap: 0;
+  }
+  .layout-group button {
+    border-radius: 0;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .layout-group button:first-child { border-radius: 6px 0 0 6px; }
+  .layout-group button:last-child { border-radius: 0 6px 6px 0; }
+  .layout-group button.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  /* ---------- virtual scroll ---------- */
+  .vs-container {
+    position: relative;
+    overflow: visible;
+  }
+  .vs-spacer {
+    width: 100%;
+    pointer-events: none;
+  }
+  .vs-row {
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: flex;
+    gap: 8px;
+  }
+  .vs-row .card {
+    flex-shrink: 0;
+    aspect-ratio: auto;
+  }
+  .vs-row .card .label {
+    opacity: 0;
+    transition: opacity .15s;
+  }
+  .vs-row .card:hover .label {
+    opacity: 1;
+  }
+
+  /* ---------- card tooltip ---------- */
+  .card-tooltip {
+    position: fixed;
+    background: rgba(0,0,0,.9);
+    color: #e0e0e0;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .15s;
+    z-index: 150;
+    max-width: 280px;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+  .card-tooltip.visible { opacity: 1; }
+  .card-tooltip .tt-name { font-weight: 600; color: #fff; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; display: block; }
+  .card-tooltip .tt-detail { color: #999; }
+
+  /* ---------- folder preview mosaic ---------- */
+  .folder-mosaic {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 2px;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    border-radius: 4px;
+  }
+  .folder-mosaic img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .folder-mosaic.single img { grid-column: 1 / -1; grid-row: 1 / -1; }
+</style>
+</head>
+<body>
+
+<!-- Landing -->
+<div id="landing">
+  <h1>gkpv</h1>
+  <p>gk photo viewer — browse your local photo library entirely in the browser.</p>
+  <button id="openBtn">Open Folder</button>
+</div>
+
+<!-- Toolbar -->
+<div id="toolbar" style="display:none">
+  <span class="brand">gkpv</span>
+  <button id="openBtnToolbar" title="Open a different folder">Open</button>
+  <div id="breadcrumbs"></div>
+  <div class="layout-group">
+    <button data-layout="grid">Grid</button>
+    <button data-layout="justified" class="active">Justified</button>
+  </div>
+  <div class="size-group">
+    <button data-size="sm">S</button>
+    <button data-size="md" class="active">M</button>
+    <button data-size="lg">L</button>
+  </div>
+  <select id="sortSelect" title="Sort order">
+    <option value="name-asc">Name A–Z</option>
+    <option value="name-desc">Name Z–A</option>
+    <option value="date-new">Newest</option>
+    <option value="date-old">Oldest</option>
+  </select>
+  <button id="clearCacheBtn" title="Clear thumbnail cache">Clear Cache</button>
+  <span id="counter"></span>
+</div>
+
+<!-- Loading -->
+<div id="loading"><div class="spinner"></div>Scanning directory…</div>
+
+<!-- Gallery -->
+<div id="gallery"></div>
+
+<!-- Card Tooltip -->
+<div id="cardTooltip" class="card-tooltip"></div>
+
+<!-- Lightbox -->
+<div id="lightbox">
+  <button class="close-btn" title="Close (Esc)">&times;</button>
+  <button class="info-btn" title="Image info (I)">&#9432;</button>
+  <div id="exifPanel" class="exif-panel"></div>
+  <button class="nav-btn nav-prev" title="Previous (←)">&#8249;</button>
+  <button class="nav-btn nav-next" title="Next (→)">&#8250;</button>
+  <img id="lbImgPrev" src="" alt="" draggable="false">
+  <img id="lbImg" src="" alt="" draggable="false">
+  <div id="lbZoom"></div>
+  <div class="info" id="lbInfo"></div>
+</div>
+
+<script>
+const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','bmp','webp','avif','svg','ico','tiff','tif','heic']);
+
+// Thumbnail constants
+const THUMB_MAX = 640;
+const THUMB_QUALITY = 0.8;
+const THUMB_CONCURRENCY = 4;
+
+let rootHandle = null;   // FileSystemDirectoryHandle for the root
+let currentPath = [];     // path segments from root
+let currentImages = [];   // { name, file, thumbUrl } for lightbox navigation
+let lbIndex = 0;
+let lbCurrentUrl = null;  // full-size blob URL currently shown in lightbox
+let thumbGeneration = 0;  // generation counter to abort stale work
+let currentThumbUrls = []; // blob URLs for current thumbnails (for revocation)
+
+// Layout & virtual scroll state
+let layoutMode = 'justified'; // 'grid' | 'justified'
+let currentSizeKey = 'md';
+let layoutRows = [];
+let totalHeight = 0;
+let renderedRange = { start: -1, end: -1 };
+let rowElements = new Map();
+let $scrollContainer = null, $spacer = null;
+let vsScrollHandler = null, vsResizeHandler = null;
+let vsGen = 0; // virtual scroll generation
+let currentFolderCount = 0;
+let currentDirPath = '';
+let thumbQueue = [], thumbQueueIdx = 0, thumbWorkersRunning = 0;
+let relayoutTimer = null;
+
+// OPFS cache state
+let cacheDir = null;      // FileSystemDirectoryHandle for gkpv-thumbs in OPFS
+const memCache = new Map(); // in-memory fallback if OPFS unavailable
+
+// DOM refs
+const $landing   = document.getElementById('landing');
+const $toolbar   = document.getElementById('toolbar');
+const $gallery   = document.getElementById('gallery');
+const $loading   = document.getElementById('loading');
+const $lightbox  = document.getElementById('lightbox');
+const $lbImg     = document.getElementById('lbImg');
+const $lbImgPrev = document.getElementById('lbImgPrev');
+const $lbInfo    = document.getElementById('lbInfo');
+const $crumbs    = document.getElementById('breadcrumbs');
+const $counter   = document.getElementById('counter');
+const $sort      = document.getElementById('sortSelect');
+
+// ---- Card tooltip ----
+const $tooltip = document.getElementById('cardTooltip');
+
+function showTooltip(entry, x, y) {
+  const dims = entry.width ? `${entry.width} × ${entry.height}` : '—';
+  const size = formatSize(entry.file.size);
+  const date = new Date(entry.file.lastModified).toLocaleDateString();
+  $tooltip.innerHTML = `<span class="tt-name">${esc(entry.name)}</span><span class="tt-detail">${esc(dims)} &middot; ${esc(size)} &middot; ${esc(date)}</span>`;
+  positionTooltip(x, y);
+  $tooltip.classList.add('visible');
+}
+
+function positionTooltip(x, y) {
+  const pad = 12;
+  let left = x + pad, top = y + pad;
+  const tw = $tooltip.offsetWidth, th = $tooltip.offsetHeight;
+  if (left + tw > window.innerWidth - pad) left = x - tw - pad;
+  if (top + th > window.innerHeight - pad) top = y - th - pad;
+  $tooltip.style.left = left + 'px';
+  $tooltip.style.top = top + 'px';
+}
+
+function hideTooltip() {
+  $tooltip.classList.remove('visible');
+}
+
+function attachTooltip(card, entry) {
+  card.addEventListener('mouseenter', e => showTooltip(entry, e.clientX, e.clientY));
+  card.addEventListener('mousemove', e => { if ($tooltip.classList.contains('visible')) positionTooltip(e.clientX, e.clientY); });
+  card.addEventListener('mouseleave', hideTooltip);
+}
+
+// ---- OPFS Cache System ----
+async function initCache() {
+  try {
+    const opfsRoot = await navigator.storage.getDirectory();
+    cacheDir = await opfsRoot.getDirectoryHandle('gkpv-thumbs', { create: true });
+  } catch (e) {
+    console.warn('OPFS unavailable, using in-memory cache:', e);
+    cacheDir = null;
+  }
+}
+
+function cacheKey(dirPath, file) {
+  const raw = `${dirPath}/${file.name}_${file.size}_${file.lastModified}`;
+  return raw.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
+}
+
+async function getCachedThumb(key) {
+  if (cacheDir) {
+    try {
+      const fileHandle = await cacheDir.getFileHandle(key);
+      const file = await fileHandle.getFile();
+      return file;
+    } catch (e) {
+      return null;
+    }
+  }
+  return memCache.get(key) || null;
+}
+
+async function setCachedThumb(key, blob) {
+  if (cacheDir) {
+    try {
+      const fileHandle = await cacheDir.getFileHandle(key, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+    } catch (e) {
+      console.warn('Cache write failed:', e);
+    }
+  } else {
+    memCache.set(key, blob);
+  }
+}
+
+async function clearCache() {
+  if (cacheDir) {
+    try {
+      const opfsRoot = await navigator.storage.getDirectory();
+      await opfsRoot.removeEntry('gkpv-thumbs', { recursive: true });
+      cacheDir = await opfsRoot.getDirectoryHandle('gkpv-thumbs', { create: true });
+    } catch (e) {
+      console.warn('Cache clear failed:', e);
+    }
+  }
+  memCache.clear();
+}
+
+// ---- Utilities ----
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+  return (bytes / 1073741824).toFixed(1) + ' GB';
+}
+
+// ---- Thumbnail Generation ----
+async function generateThumb(file) {
+  const bitmap = await createImageBitmap(file);
+  const origW = bitmap.width, origH = bitmap.height;
+  let w = origW, h = origH;
+  if (w > THUMB_MAX || h > THUMB_MAX) {
+    const scale = Math.min(THUMB_MAX / w, THUMB_MAX / h);
+    w = Math.round(w * scale);
+    h = Math.round(h * scale);
+  }
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: THUMB_QUALITY });
+  return { blob, width: origW, height: origH };
+}
+
+async function getOrCreateThumb(dirPath, file) {
+  const key = cacheKey(dirPath, file);
+  const cached = await getCachedThumb(key);
+  if (cached) {
+    const url = URL.createObjectURL(cached);
+    // Try to load dimensions from metadata sidecar
+    let width = 0, height = 0;
+    try {
+      if (cacheDir) {
+        const mh = await cacheDir.getFileHandle(key + '_m');
+        const mf = await mh.getFile();
+        const meta = JSON.parse(await mf.text());
+        if (typeof meta.w === 'number' && typeof meta.h === 'number') {
+          width = meta.w; height = meta.h;
+        }
+      }
+    } catch (e) { /* no metadata yet */ }
+    return { url, width, height };
+  }
+  const { blob, width, height } = await generateThumb(file);
+  await setCachedThumb(key, blob);
+  // Store dimensions metadata sidecar
+  try {
+    if (cacheDir) {
+      const mh = await cacheDir.getFileHandle(key + '_m', { create: true });
+      const mw = await mh.createWritable();
+      await mw.write(JSON.stringify({ w: width, h: height }));
+      await mw.close();
+    }
+  } catch (e) { /* ignore */ }
+  const url = URL.createObjectURL(blob);
+  return { url, width, height };
+}
+
+// ---- Memory cleanup ----
+function revokeCurrentUrls() {
+  for (const url of currentThumbUrls) {
+    URL.revokeObjectURL(url);
+  }
+  currentThumbUrls = [];
+}
+
+// ---- Open folder ----
+document.getElementById('openBtn').addEventListener('click', pickFolder);
+document.getElementById('openBtnToolbar').addEventListener('click', pickFolder);
+
+async function pickFolder() {
+  try {
+    rootHandle = await window.showDirectoryPicker({ mode: 'read' });
+    currentPath = [];
+    $landing.style.display = 'none';
+    $toolbar.style.display = 'flex';
+    $gallery.style.display = 'block';
+    await initCache();
+    await renderDirectory();
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error(e);
+  }
+}
+
+// ---- Clear Cache button ----
+document.getElementById('clearCacheBtn').addEventListener('click', async () => {
+  await clearCache();
+  if (rootHandle) await renderDirectory();
+});
+
+// ---- Navigate into a subdirectory ----
+async function navigateTo(pathSegments) {
+  currentPath = pathSegments;
+  await renderDirectory();
+}
+
+// ---- Get directory handle for currentPath ----
+async function getDirHandle(path) {
+  let h = rootHandle;
+  for (const seg of path) {
+    h = await h.getDirectoryHandle(seg);
+  }
+  return h;
+}
+
+// ---- Scan a single directory level ----
+async function scanDir(dirHandle) {
+  const folders = [];
+  const images = [];
+  for await (const [name, handle] of dirHandle) {
+    if (name.startsWith('.')) continue;
+    if (handle.kind === 'directory') {
+      folders.push({ name, handle });
+    } else {
+      const ext = name.split('.').pop().toLowerCase();
+      if (IMAGE_EXTS.has(ext)) {
+        const file = await handle.getFile();
+        images.push({ name, file, handle });
+      }
+    }
+  }
+  return { folders, images };
+}
+
+// ---- Sort helper ----
+function sortItems(items) {
+  const order = $sort.value;
+  const copy = [...items];
+  switch (order) {
+    case 'name-asc':
+      copy.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      break;
+    case 'name-desc':
+      copy.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
+      break;
+    case 'date-new':
+      copy.sort((a, b) => (b.file?.lastModified || 0) - (a.file?.lastModified || 0));
+      break;
+    case 'date-old':
+      copy.sort((a, b) => (a.file?.lastModified || 0) - (b.file?.lastModified || 0));
+      break;
+  }
+  return copy;
+}
+
+$sort.addEventListener('change', renderDirectory);
+
+// ---- Layout calculators ----
+function getTargetRowHeight() {
+  const map = { sm: 150, md: 220, lg: 320 };
+  return map[currentSizeKey] || 220;
+}
+
+function getThumbSizePx() {
+  const map = { sm: 120, md: 200, lg: 320 };
+  return map[currentSizeKey] || 200;
+}
+
+function computeJustifiedLayout(entries, containerWidth) {
+  const rows = [];
+  const gap = 8;
+  const targetH = getTargetRowHeight();
+  let row = [], rowAspectSum = 0;
+  let y = 0;
+
+  for (let i = 0; i < entries.length; i++) {
+    const aspect = entries[i].aspect || 1;
+    row.push(i);
+    rowAspectSum += aspect;
+    const usableW = containerWidth - gap * (row.length - 1);
+    const rowH = usableW / rowAspectSum;
+
+    if (rowH <= targetH && row.length > 0) {
+      // Row is full
+      const h = Math.round(rowH);
+      let x = 0;
+      const items = row.map(idx => {
+        const w = Math.round((entries[idx].aspect || 1) * h);
+        const item = { imageIndex: idx, width: w, height: h, left: x };
+        x += w + gap;
+        return item;
+      });
+      rows.push({ top: y, height: h, items });
+      y += h + gap;
+      row = []; rowAspectSum = 0;
+    }
+  }
+
+  // Last row — left-aligned at target height
+  if (row.length > 0) {
+    const h = Math.round(Math.min(targetH, (containerWidth - gap * (row.length - 1)) / rowAspectSum));
+    let x = 0;
+    const items = row.map(idx => {
+      const w = Math.round((entries[idx].aspect || 1) * h);
+      const item = { imageIndex: idx, width: w, height: h, left: x };
+      x += w + gap;
+      return item;
+    });
+    rows.push({ top: y, height: h, items });
+    y += h + gap;
+  }
+
+  return { rows, totalHeight: y };
+}
+
+function computeGridLayout(entries, containerWidth) {
+  const gap = 8;
+  const thumbSize = getThumbSizePx();
+  const cols = Math.max(1, Math.floor((containerWidth + gap) / (thumbSize + gap)));
+  const cellW = Math.floor((containerWidth - gap * (cols - 1)) / cols);
+  const rows = [];
+  let y = 0;
+
+  for (let i = 0; i < entries.length; i += cols) {
+    const rowItems = [];
+    for (let c = 0; c < cols && i + c < entries.length; c++) {
+      rowItems.push({ imageIndex: i + c, width: cellW, height: cellW, left: c * (cellW + gap) });
+    }
+    rows.push({ top: y, height: cellW, items: rowItems });
+    y += cellW + gap;
+  }
+
+  return { rows, totalHeight: y };
+}
+
+// ---- Virtual scroll engine ----
+function findFirstVisibleRow(scrollTop) {
+  let lo = 0, hi = layoutRows.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (layoutRows[mid].top + layoutRows[mid].height < scrollTop) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function createRowElement(row, gen) {
+  const div = document.createElement('div');
+  div.className = 'vs-row';
+  div.style.top = row.top + 'px';
+  div.style.height = row.height + 'px';
+  for (const item of row.items) {
+    const entry = currentImages[item.imageIndex];
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.width = item.width + 'px';
+    card.style.height = item.height + 'px';
+    card.style.position = 'absolute';
+    card.style.left = item.left + 'px';
+    const img = document.createElement('img');
+    img.alt = entry.name;
+    if (entry.thumbUrl) {
+      img.src = entry.thumbUrl;
+      img.classList.add('loaded');
+      card.classList.add('thumb-ready');
+    }
+    entry._currentImgEl = img;
+    entry._currentCardEl = card;
+    card.appendChild(img);
+    const lbl = document.createElement('span');
+    lbl.className = 'label';
+    lbl.textContent = entry.name;
+    card.appendChild(lbl);
+    const idx = item.imageIndex;
+    card.addEventListener('click', () => openLightbox(idx));
+    attachTooltip(card, entry);
+    div.appendChild(card);
+  }
+  return div;
+}
+
+function renderVisibleRows() {
+  if (!$scrollContainer || !layoutRows.length) return;
+  const gen = vsGen;
+  const scrollTop = window.scrollY - $scrollContainer.getBoundingClientRect().top - window.scrollY + window.scrollY;
+  const containerRect = $scrollContainer.getBoundingClientRect();
+  const viewTop = -containerRect.top;
+  const viewBottom = viewTop + window.innerHeight;
+  const buffer = 5;
+
+  let startRow = findFirstVisibleRow(Math.max(0, viewTop));
+  startRow = Math.max(0, startRow - buffer);
+  let endRow = startRow;
+  while (endRow < layoutRows.length && layoutRows[endRow].top < viewBottom) endRow++;
+  endRow = Math.min(layoutRows.length - 1, endRow + buffer);
+
+  // Remove rows that left viewport
+  for (const [ri, el] of rowElements) {
+    if (ri < startRow || ri > endRow) {
+      el.remove();
+      rowElements.delete(ri);
+    }
+  }
+
+  // Add rows that entered
+  for (let ri = startRow; ri <= endRow; ri++) {
+    if (!rowElements.has(ri)) {
+      const el = createRowElement(layoutRows[ri], gen);
+      $scrollContainer.appendChild(el);
+      rowElements.set(ri, el);
+      enqueueRowThumbnails(layoutRows[ri]);
+    }
+  }
+
+  renderedRange = { start: startRow, end: endRow };
+}
+
+function recalculateLayout() {
+  if (!$scrollContainer || !currentImages.length) return;
+  const containerWidth = $scrollContainer.clientWidth;
+  if (containerWidth <= 0) return;
+
+  const result = layoutMode === 'justified'
+    ? computeJustifiedLayout(currentImages, containerWidth)
+    : computeGridLayout(currentImages, containerWidth);
+
+  layoutRows = result.rows;
+  totalHeight = result.totalHeight;
+  $spacer.style.height = totalHeight + 'px';
+
+  // Remove all rendered rows and re-render
+  for (const [, el] of rowElements) el.remove();
+  rowElements.clear();
+  renderedRange = { start: -1, end: -1 };
+  renderVisibleRows();
+}
+
+function setupVirtualScroll() {
+  vsGen++;
+  let scrollRaf = false;
+  vsScrollHandler = () => {
+    if (scrollRaf) return;
+    scrollRaf = true;
+    requestAnimationFrame(() => { scrollRaf = false; renderVisibleRows(); });
+  };
+  let resizeRaf = false;
+  vsResizeHandler = () => {
+    if (resizeRaf) return;
+    resizeRaf = true;
+    requestAnimationFrame(() => { resizeRaf = false; recalculateLayout(); });
+  };
+  window.addEventListener('scroll', vsScrollHandler, { passive: true });
+  window.addEventListener('resize', vsResizeHandler);
+}
+
+function teardownVirtualScroll() {
+  if (vsScrollHandler) { window.removeEventListener('scroll', vsScrollHandler); vsScrollHandler = null; }
+  if (vsResizeHandler) { window.removeEventListener('resize', vsResizeHandler); vsResizeHandler = null; }
+  for (const [, el] of rowElements) el.remove();
+  rowElements.clear();
+  layoutRows = [];
+  renderedRange = { start: -1, end: -1 };
+  $scrollContainer = null; $spacer = null;
+  thumbQueue = []; thumbQueueIdx = 0;
+}
+
+// ---- Visibility-aware thumbnail queue ----
+function enqueueRowThumbnails(row) {
+  for (const item of row.items) {
+    const entry = currentImages[item.imageIndex];
+    if (!entry.thumbUrl && !entry._thumbQueued) {
+      entry._thumbQueued = true;
+      thumbQueue.push(item.imageIndex);
+    }
+  }
+  startThumbWorkers();
+}
+
+function startThumbWorkers() {
+  const gen = thumbGeneration;
+  while (thumbWorkersRunning < THUMB_CONCURRENCY && thumbQueueIdx < thumbQueue.length) {
+    thumbWorkersRunning++;
+    (async () => {
+      while (thumbQueueIdx < thumbQueue.length) {
+        const idx = thumbQueue[thumbQueueIdx++];
+        if (gen !== thumbGeneration) break;
+        const entry = currentImages[idx];
+        if (entry.thumbUrl) continue;
+        try {
+          const thumbResult = await getOrCreateThumb(currentDirPath, entry.file);
+          if (gen !== thumbGeneration) { URL.revokeObjectURL(thumbResult.url); break; }
+          entry.thumbUrl = thumbResult.url;
+          currentThumbUrls.push(thumbResult.url);
+          const hadAspect = entry.width > 0;
+          if (thumbResult.width) { entry.width = thumbResult.width; entry.height = thumbResult.height; entry.aspect = thumbResult.width / thumbResult.height; }
+          // Update DOM element if it exists
+          if (entry._currentImgEl) {
+            entry._currentImgEl.src = entry.thumbUrl;
+            entry._currentImgEl.onload = () => {
+              entry._currentImgEl.classList.add('loaded');
+              if (entry._currentCardEl) entry._currentCardEl.classList.add('thumb-ready');
+            };
+          }
+          // Schedule relayout if we discovered a new aspect ratio
+          if (!hadAspect && entry.width > 0) scheduleRelayout();
+        } catch (e) {
+          console.warn('Thumb failed for', entry.name, e);
+          if (entry._currentCardEl) entry._currentCardEl.classList.add('thumb-ready');
+        }
+        // Update counter
+        const done = currentImages.filter(e => e.thumbUrl || e._thumbFailed).length;
+        const total = currentImages.length;
+        if (gen === thumbGeneration) {
+          if (done < total) $counter.textContent = `Generating thumbnails (${done}/${total})...`;
+          else $counter.textContent = `${total} image${total !== 1 ? 's' : ''}, ${currentFolderCount} folder${currentFolderCount !== 1 ? 's' : ''}`;
+        }
+      }
+      thumbWorkersRunning--;
+    })();
+  }
+}
+
+function scheduleRelayout() {
+  clearTimeout(relayoutTimer);
+  relayoutTimer = setTimeout(() => {
+    if ($scrollContainer) recalculateLayout();
+    saveAspectRatios(currentDirPath, currentImages);
+  }, 200);
+}
+
+// ---- Folder preview thumbnails ----
+const FOLDER_THUMB_MAX = 160;
+
+async function scanFolderPreview(folderHandle, max = 4) {
+  const files = [];
+  try {
+    for await (const [name, handle] of folderHandle) {
+      if (handle.kind !== 'file') continue;
+      const ext = name.split('.').pop().toLowerCase();
+      if (IMAGE_EXTS.has(ext)) {
+        files.push(await handle.getFile());
+        if (files.length >= max) break;
+      }
+    }
+  } catch (e) { /* permission or read error */ }
+  return files;
+}
+
+async function generateFolderThumb(file) {
+  const bitmap = await createImageBitmap(file);
+  let w = bitmap.width, h = bitmap.height;
+  if (w > FOLDER_THUMB_MAX || h > FOLDER_THUMB_MAX) {
+    const scale = Math.min(FOLDER_THUMB_MAX / w, FOLDER_THUMB_MAX / h);
+    w = Math.round(w * scale);
+    h = Math.round(h * scale);
+  }
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  return await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.6 });
+}
+
+async function getFolderThumb(dirPath, file) {
+  const key = 'fp_' + cacheKey(dirPath, file);
+  const cached = await getCachedThumb(key);
+  if (cached) return URL.createObjectURL(cached);
+  const blob = await generateFolderThumb(file);
+  await setCachedThumb(key, blob);
+  return URL.createObjectURL(blob);
+}
+
+async function loadFolderPreviews(folderCards, gen) {
+  for (const card of folderCards) {
+    if (gen !== thumbGeneration) return;
+    try {
+      const files = await scanFolderPreview(card._folderHandle);
+      if (gen !== thumbGeneration) return;
+      if (files.length === 0) continue;
+
+      const dirPath = [...currentPath, card._folderName].join('/');
+      const urls = [];
+      for (const f of files) {
+        if (gen !== thumbGeneration) return;
+        const url = await getFolderThumb(dirPath, f);
+        if (gen !== thumbGeneration) { URL.revokeObjectURL(url); return; }
+        urls.push(url);
+        currentThumbUrls.push(url);
+      }
+
+      // Replace icon with mosaic
+      const icon = card.querySelector('.folder-icon');
+      if (icon) {
+        const mosaic = document.createElement('div');
+        mosaic.className = 'folder-mosaic' + (urls.length === 1 ? ' single' : '');
+        for (const url of urls) {
+          const img = document.createElement('img');
+          img.src = url;
+          mosaic.appendChild(img);
+        }
+        icon.replaceWith(mosaic);
+      }
+    } catch (e) { /* skip folder */ }
+  }
+}
+
+// ---- Render current directory ----
+async function renderDirectory() {
+  const gen = ++thumbGeneration;
+
+  // Cleanup
+  revokeCurrentUrls();
+  teardownVirtualScroll();
+
+  $gallery.innerHTML = '';
+  $loading.classList.add('show');
+  $gallery.style.display = 'none';
+
+  try {
+    const dirHandle = await getDirHandle(currentPath);
+    const { folders, images } = await scanDir(dirHandle);
+
+    if (gen !== thumbGeneration) return;
+
+    const sortedFolders = sortItems(folders);
+    const sortedImages = sortItems(images);
+
+    currentDirPath = currentPath.join('/');
+    currentFolderCount = sortedFolders.length;
+
+    // Build image entries
+    const imgEntries = sortedImages.map(img => ({
+      name: img.name,
+      file: img.file,
+      thumbUrl: null,
+      width: 0,
+      height: 0,
+      aspect: 1,
+      _thumbQueued: false,
+      _thumbFailed: false,
+      _currentImgEl: null,
+      _currentCardEl: null,
+    }));
+
+    currentImages = imgEntries;
+    thumbQueue = [];
+    thumbQueueIdx = 0;
+    thumbWorkersRunning = 0;
+
+    $gallery.innerHTML = '';
+
+    // Folders (NOT virtualized)
+    if (sortedFolders.length) {
+      const sec = document.createElement('div');
+      sec.className = 'dir-section';
+      const h = document.createElement('h3');
+      h.textContent = `Folders (${sortedFolders.length})`;
+      sec.appendChild(h);
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      for (const f of sortedFolders) {
+        const card = document.createElement('div');
+        card.className = 'card folder-card';
+        card.innerHTML = `<span class="folder-icon">&#128193;</span><span class="label">${esc(f.name)}</span>`;
+        card.addEventListener('click', () => navigateTo([...currentPath, f.name]));
+        card._folderHandle = f.handle;
+        card._folderName = f.name;
+        grid.appendChild(card);
+      }
+      sec.appendChild(grid);
+      $gallery.appendChild(sec);
+    }
+
+    // Images — virtual scrolling
+    if (imgEntries.length) {
+      const sec = document.createElement('div');
+      sec.className = 'dir-section';
+      const h = document.createElement('h3');
+      h.textContent = `Images (${imgEntries.length})`;
+      sec.appendChild(h);
+
+      $scrollContainer = document.createElement('div');
+      $scrollContainer.className = 'vs-container';
+      $spacer = document.createElement('div');
+      $spacer.className = 'vs-spacer';
+      $scrollContainer.appendChild($spacer);
+      sec.appendChild($scrollContainer);
+      $gallery.appendChild(sec);
+    }
+
+    if (!sortedFolders.length && !imgEntries.length) {
+      $gallery.innerHTML = '<p style="text-align:center;padding:60px;color:var(--text-muted)">No images or subfolders found in this directory.</p>';
+    }
+
+    // Counter & breadcrumbs
+    $counter.textContent = `${imgEntries.length} image${imgEntries.length !== 1 ? 's' : ''}, ${sortedFolders.length} folder${sortedFolders.length !== 1 ? 's' : ''}`;
+    renderBreadcrumbs();
+
+    $loading.classList.remove('show');
+    $gallery.style.display = 'block';
+
+    // Initialize virtual scroll
+    if (imgEntries.length && $scrollContainer) {
+      // Load cached aspect ratios from OPFS
+      await loadAspectRatios(currentDirPath, imgEntries, gen);
+      if (gen !== thumbGeneration) return;
+
+      recalculateLayout();
+      setupVirtualScroll();
+      renderVisibleRows();
+    }
+
+    // Load folder preview thumbnails (async, low priority)
+    if (sortedFolders.length) {
+      const folderCards = [...$gallery.querySelectorAll('.folder-card')];
+      loadFolderPreviews(folderCards, gen);
+    }
+  } catch (e) {
+    if (gen === thumbGeneration) {
+      $gallery.innerHTML = `<p style="text-align:center;padding:60px;color:#f66">Error reading directory: ${esc(e.message)}</p>`;
+      $loading.classList.remove('show');
+      $gallery.style.display = 'block';
+    }
+  }
+}
+
+// ---- Aspect ratio OPFS cache ----
+async function loadAspectRatios(dirPath, entries, gen) {
+  if (!cacheDir) return;
+  const arKey = 'ar_' + dirPath.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 180);
+  let ratios = {};
+  try {
+    const fh = await cacheDir.getFileHandle(arKey);
+    const f = await fh.getFile();
+    ratios = JSON.parse(await f.text());
+  } catch (e) { /* no cache yet */ }
+
+  let anyNew = false;
+  for (const entry of entries) {
+    const key = `${entry.name}_${entry.file.size}_${entry.file.lastModified}`;
+    if (ratios[key] && typeof ratios[key].w === 'number' && typeof ratios[key].h === 'number' && ratios[key].h > 0) {
+      entry.width = ratios[key].w;
+      entry.height = ratios[key].h;
+      entry.aspect = ratios[key].w / ratios[key].h;
+    }
+  }
+}
+
+async function saveAspectRatios(dirPath, entries) {
+  if (!cacheDir) return;
+  const arKey = 'ar_' + dirPath.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 180);
+  const ratios = {};
+  for (const entry of entries) {
+    if (entry.width > 0) {
+      const key = `${entry.name}_${entry.file.size}_${entry.file.lastModified}`;
+      ratios[key] = { w: entry.width, h: entry.height };
+    }
+  }
+  try {
+    const fh = await cacheDir.getFileHandle(arKey, { create: true });
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify(ratios));
+    await w.close();
+  } catch (e) { /* ignore */ }
+}
+
+// ---- Breadcrumbs ----
+function renderBreadcrumbs() {
+  $crumbs.innerHTML = '';
+  const btn0 = document.createElement('button');
+  btn0.textContent = rootHandle.name;
+  btn0.addEventListener('click', () => navigateTo([]));
+  $crumbs.appendChild(btn0);
+
+  for (let i = 0; i < currentPath.length; i++) {
+    const sep = document.createElement('span');
+    sep.textContent = ' / ';
+    $crumbs.appendChild(sep);
+    const btn = document.createElement('button');
+    btn.textContent = currentPath[i];
+    const target = currentPath.slice(0, i + 1);
+    btn.addEventListener('click', () => navigateTo(target));
+    $crumbs.appendChild(btn);
+  }
+}
+
+// ---- Thumbnail size ----
+document.querySelectorAll('.size-group button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.size-group button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentSizeKey = btn.dataset.size;
+    document.documentElement.style.setProperty('--thumb-size',
+      currentSizeKey === 'sm' ? 'var(--thumb-sm)' : currentSizeKey === 'lg' ? 'var(--thumb-lg)' : 'var(--thumb-md)');
+    if ($scrollContainer) recalculateLayout();
+  });
+});
+
+// ---- Layout toggle ----
+document.querySelectorAll('.layout-group button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.layout-group button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    layoutMode = btn.dataset.layout;
+    if ($scrollContainer) recalculateLayout();
+  });
+});
+
+// ---- EXIF Parser ----
+const exifCache = new Map();
+
+function exifCacheKey(file) { return `${file.name}_${file.size}_${file.lastModified}`; }
+
+async function parseExif(file) {
+  const key = exifCacheKey(file);
+  if (exifCache.has(key)) return exifCache.get(key);
+  const result = await _parseExif(file);
+  exifCache.set(key, result);
+  return result;
+}
+
+async function _parseExif(file) {
+  if (!file.type || (!file.type.includes('jpeg') && !file.name.toLowerCase().match(/\.jpe?g$/))) return null;
+  try {
+    const buf = await file.slice(0, 65536).arrayBuffer();
+    const view = new DataView(buf);
+    if (view.getUint16(0) !== 0xFFD8) return null;
+    let offset = 2;
+    while (offset < view.byteLength - 4) {
+      const marker = view.getUint16(offset);
+      if (marker === 0xFFE1) { // APP1
+        const len = view.getUint16(offset + 2);
+        const exifStart = offset + 4;
+        // Check "Exif\0\0"
+        if (view.getUint32(exifStart) !== 0x45786966 || view.getUint16(exifStart + 4) !== 0x0000) return null;
+        const tiffStart = exifStart + 6;
+        const bo = view.getUint16(tiffStart);
+        const le = bo === 0x4949;
+        if (!le && bo !== 0x4D4D) return null;
+        const g16 = (o) => view.getUint16(tiffStart + o, le);
+        const g32 = (o) => view.getUint32(tiffStart + o, le);
+        const firstIFD = g32(4);
+        const tags = {};
+        function readTagValue(type, count, valueOffset) {
+          if (type === 2) { // ASCII
+            let s = '';
+            const maxLen = Math.min(count - 1, buf.byteLength - (tiffStart + valueOffset));
+            for (let i = 0; i < maxLen; i++) s += String.fromCharCode(view.getUint8(tiffStart + valueOffset + i));
+            return s.trim();
+          }
+          if (type === 3) return g16(valueOffset); // SHORT
+          if (type === 4) return g32(valueOffset); // LONG
+          if (type === 5) { // RATIONAL
+            const num = g32(valueOffset), den = g32(valueOffset + 4);
+            return den ? num / den : 0;
+          }
+          return null;
+        }
+        function readIFD(ifdOffset) {
+          const entries = {};
+          const count = g16(ifdOffset);
+          for (let i = 0; i < count; i++) {
+            const eo = ifdOffset + 2 + i * 12;
+            if (tiffStart + eo + 12 > buf.byteLength) break;
+            const tag = g16(eo), type = g16(eo + 2), cnt = g32(eo + 4);
+            const typeSize = { 1:1, 2:1, 3:2, 4:4, 5:8 }[type] || 0;
+            let vo;
+            if (typeSize * cnt <= 4) { vo = eo + 8; }
+            else { vo = g32(eo + 8); }
+            if (tiffStart + vo + typeSize * cnt > buf.byteLength) continue;
+            entries[tag] = readTagValue(type, cnt, vo);
+          }
+          return entries;
+        }
+        const ifd0 = readIFD(firstIFD);
+        tags.Make = ifd0[0x010F] || '';
+        tags.Model = ifd0[0x0110] || '';
+        let exifIFD = null;
+        if (ifd0[0x8769]) exifIFD = readIFD(ifd0[0x8769]);
+        if (exifIFD) {
+          tags.ExposureTime = exifIFD[0x829A];
+          tags.FNumber = exifIFD[0x829D];
+          tags.ISO = exifIFD[0x8827];
+          tags.DateTimeOriginal = exifIFD[0x9003];
+          tags.FocalLength = exifIFD[0x920A];
+          tags.LensModel = exifIFD[0xA434];
+          tags.PixelXDimension = exifIFD[0xA002];
+          tags.PixelYDimension = exifIFD[0xA003];
+        }
+        return tags;
+      }
+      if ((marker & 0xFF00) !== 0xFF00) break;
+      offset += 2 + view.getUint16(offset + 2);
+    }
+    return null;
+  } catch (e) { return null; }
+}
+
+function formatShutter(v) {
+  if (!v) return null;
+  if (v >= 1) return v + 's';
+  return '1/' + Math.round(1 / v) + 's';
+}
+function formatAperture(v) { return v ? 'f/' + v.toFixed(1) : null; }
+function formatFocalLength(v) { return v ? Math.round(v) + 'mm' : null; }
+
+// ---- EXIF Panel UI ----
+const $exifPanel = document.getElementById('exifPanel');
+const $infoBtn = document.querySelector('.info-btn');
+let exifPanelOpen = false;
+
+function toggleExifPanel() {
+  exifPanelOpen = !exifPanelOpen;
+  $exifPanel.classList.toggle('open', exifPanelOpen);
+  $infoBtn.classList.toggle('active', exifPanelOpen);
+  if (exifPanelOpen) updateExifPanel();
+}
+
+async function updateExifPanel() {
+  if (!exifPanelOpen) return;
+  const entry = currentImages[lbIndex];
+  if (!entry) return;
+  let html = '<div class="exif-heading">File</div>';
+  html += `<div class="exif-row"><span class="exif-label">Name</span><span class="exif-value">${esc(entry.name)}</span></div>`;
+  html += `<div class="exif-row"><span class="exif-label">Size</span><span class="exif-value">${esc(formatSize(entry.file.size))}</span></div>`;
+  html += `<div class="exif-row"><span class="exif-label">Type</span><span class="exif-value">${esc(entry.file.type || '—')}</span></div>`;
+  if (entry.width) {
+    html += `<div class="exif-row"><span class="exif-label">Dimensions</span><span class="exif-value">${esc(String(entry.width))} × ${esc(String(entry.height))}</span></div>`;
+  }
+  html += `<div class="exif-row"><span class="exif-label">Modified</span><span class="exif-value">${new Date(entry.file.lastModified).toLocaleDateString()}</span></div>`;
+
+  const exif = await parseExif(entry.file);
+  if (exif) {
+    html += '<div class="exif-heading">Camera</div>';
+    const cam = [exif.Make, exif.Model].filter(Boolean).join(' ');
+    if (cam) html += `<div class="exif-row"><span class="exif-label">Camera</span><span class="exif-value">${esc(cam)}</span></div>`;
+    if (exif.LensModel) html += `<div class="exif-row"><span class="exif-label">Lens</span><span class="exif-value">${esc(exif.LensModel)}</span></div>`;
+    const settings = [formatFocalLength(exif.FocalLength), formatAperture(exif.FNumber), formatShutter(exif.ExposureTime), exif.ISO ? 'ISO ' + exif.ISO : null].filter(Boolean).join('  ');
+    if (settings) html += `<div class="exif-row"><span class="exif-label">Settings</span><span class="exif-value">${esc(settings)}</span></div>`;
+    if (exif.DateTimeOriginal) html += `<div class="exif-row"><span class="exif-label">Taken</span><span class="exif-value">${esc(exif.DateTimeOriginal)}</span></div>`;
+    if (exif.PixelXDimension && exif.PixelYDimension) html += `<div class="exif-row"><span class="exif-label">EXIF Size</span><span class="exif-value">${esc(String(exif.PixelXDimension))} × ${esc(String(exif.PixelYDimension))}</span></div>`;
+  } else {
+    html += '<div class="exif-heading" style="color:#666">No EXIF data</div>';
+  }
+  $exifPanel.innerHTML = html;
+}
+
+$infoBtn.addEventListener('click', toggleExifPanel);
+
+// ---- Lightbox preload ----
+const lbPreloadCache = new Map(); // index -> blobURL
+
+function lbPreloadAdjacent() {
+  if (currentImages.length <= 1) return;
+  const needed = new Set([lbIndex]);
+  const prev = (lbIndex - 1 + currentImages.length) % currentImages.length;
+  const next = (lbIndex + 1) % currentImages.length;
+  needed.add(prev);
+  needed.add(next);
+  // Revoke entries not in needed set (but not lbCurrentUrl)
+  for (const [idx, url] of lbPreloadCache) {
+    if (!needed.has(idx) && url !== lbCurrentUrl) {
+      URL.revokeObjectURL(url);
+      lbPreloadCache.delete(idx);
+    }
+  }
+  // Preload prev/next
+  for (const idx of [prev, next]) {
+    if (!lbPreloadCache.has(idx)) {
+      const entry = currentImages[idx];
+      if (entry) {
+        const url = URL.createObjectURL(entry.file);
+        lbPreloadCache.set(idx, url);
+        const img = new Image();
+        img.src = url; // trigger browser decode
+      }
+    }
+  }
+}
+
+// ---- Lightbox zoom/pan ----
+let lbScale = 1, lbTx = 0, lbTy = 0;
+let lbLayoutW = 0, lbLayoutH = 0;
+let lbDragging = false, lbMouseMoved = false;
+let lbDragStartX, lbDragStartY, lbDragStartTx, lbDragStartTy;
+let lbTouchDist0 = null, lbTouchScale0 = null;
+let lbZoomTimer = null;
+const LB_MIN_SCALE = 0.5, LB_MAX_SCALE = 20, LB_ZOOM_STEP = 1.15;
+const $lbZoom = document.getElementById('lbZoom');
+
+function lbApplyTransform() {
+  $lbImg.style.transform = `translate(${lbTx}px, ${lbTy}px) scale(${lbScale})`;
+  // Update cursor
+  $lbImg.className = '';
+  if (lbScale <= 1.01) {
+    $lbImg.classList.add('zoom-in-cursor');
+  } else if (lbDragging) {
+    $lbImg.classList.add('grabbing-cursor');
+  } else {
+    $lbImg.classList.add('grab-cursor');
+  }
+}
+
+function lb100Scale() {
+  if (!lbLayoutW) return 1;
+  return $lbImg.naturalWidth / lbLayoutW;
+}
+
+function lbConstrainPan() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const scaledW = lbLayoutW * lbScale, scaledH = lbLayoutH * lbScale;
+  const maxTx = Math.max(0, (scaledW - vw) / 2);
+  const maxTy = Math.max(0, (scaledH - vh) / 2);
+  lbTx = Math.max(-maxTx, Math.min(maxTx, lbTx));
+  lbTy = Math.max(-maxTy, Math.min(maxTy, lbTy));
+}
+
+function lbResetZoom() {
+  lbScale = 1; lbTx = 0; lbTy = 0;
+  lbDragging = false; lbMouseMoved = false;
+  lbTouchDist0 = null;
+  $lbImg.style.transform = '';
+  $lbImg.className = 'zoom-in-cursor';
+}
+
+function lbShowZoom() {
+  $lbZoom.textContent = Math.round(lbScale * 100) + '%';
+  $lbZoom.classList.add('visible');
+  clearTimeout(lbZoomTimer);
+  lbZoomTimer = setTimeout(() => $lbZoom.classList.remove('visible'), 1200);
+}
+
+function lbZoomTo(newScale, cx, cy) {
+  newScale = Math.max(LB_MIN_SCALE, Math.min(LB_MAX_SCALE, newScale));
+  const ratio = newScale / lbScale;
+  lbTx = cx * (1 - ratio) + lbTx * ratio;
+  lbTy = cy * (1 - ratio) + lbTy * ratio;
+  lbScale = newScale;
+  lbConstrainPan();
+  lbApplyTransform();
+  lbShowZoom();
+}
+
+// Wheel zoom
+$lbImg.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = $lbImg.getBoundingClientRect();
+  const cx = e.clientX - (rect.left + rect.width / 2);
+  const cy = e.clientY - (rect.top + rect.height / 2);
+  const factor = e.deltaY < 0 ? LB_ZOOM_STEP : 1 / LB_ZOOM_STEP;
+  lbZoomTo(lbScale * factor, cx, cy);
+}, { passive: false });
+
+// Click: toggle fit <-> 100%
+$lbImg.addEventListener('click', e => {
+  if (lbMouseMoved) return;
+  e.stopPropagation();
+  const s100 = lb100Scale();
+  if (Math.abs(lbScale - 1) < 0.01 && s100 > 1.05) {
+    // Zoom to 100% centered on click point
+    const rect = $lbImg.getBoundingClientRect();
+    const cx = e.clientX - (rect.left + rect.width / 2);
+    const cy = e.clientY - (rect.top + rect.height / 2);
+    lbZoomTo(s100, cx, cy);
+  } else {
+    lbScale = 1; lbTx = 0; lbTy = 0;
+    lbConstrainPan();
+    lbApplyTransform();
+    lbShowZoom();
+  }
+});
+
+// Mouse drag pan
+$lbImg.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  if (lbScale <= 1.01) return;
+  lbDragging = true;
+  lbMouseMoved = false;
+  lbDragStartX = e.clientX; lbDragStartY = e.clientY;
+  lbDragStartTx = lbTx; lbDragStartTy = lbTy;
+  $lbImg.classList.remove('grab-cursor');
+  $lbImg.classList.add('grabbing-cursor');
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', e => {
+  if (!lbDragging) return;
+  const dx = e.clientX - lbDragStartX, dy = e.clientY - lbDragStartY;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) lbMouseMoved = true;
+  lbTx = lbDragStartTx + dx;
+  lbTy = lbDragStartTy + dy;
+  lbConstrainPan();
+  lbApplyTransform();
+});
+
+document.addEventListener('mouseup', () => {
+  if (!lbDragging) return;
+  lbDragging = false;
+  if (lbScale > 1.01) {
+    $lbImg.classList.remove('grabbing-cursor');
+    $lbImg.classList.add('grab-cursor');
+  }
+});
+
+// Touch: single-finger pan + two-finger pinch + double-tap
+let lbLastTap = 0;
+$lbImg.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    lbTouchDist0 = Math.hypot(dx, dy);
+    lbTouchScale0 = lbScale;
+  } else if (e.touches.length === 1 && lbScale > 1.01) {
+    lbDragging = true; lbMouseMoved = false;
+    lbDragStartX = e.touches[0].clientX; lbDragStartY = e.touches[0].clientY;
+    lbDragStartTx = lbTx; lbDragStartTy = lbTy;
+  }
+  // Double tap detection
+  if (e.touches.length === 1) {
+    const now = Date.now();
+    if (now - lbLastTap < 300) {
+      e.preventDefault();
+      const s100 = lb100Scale();
+      if (lbScale <= 1.01 && s100 > 1.05) {
+        const rect = $lbImg.getBoundingClientRect();
+        const cx = e.touches[0].clientX - (rect.left + rect.width / 2);
+        const cy = e.touches[0].clientY - (rect.top + rect.height / 2);
+        lbZoomTo(s100, cx, cy);
+      } else {
+        lbScale = 1; lbTx = 0; lbTy = 0;
+        lbConstrainPan(); lbApplyTransform(); lbShowZoom();
+      }
+      lbLastTap = 0;
+    } else {
+      lbLastTap = now;
+    }
+  }
+}, { passive: false });
+
+$lbImg.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 2 && lbTouchDist0) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.hypot(dx, dy);
+    const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    const rect = $lbImg.getBoundingClientRect();
+    const cx = midX - (rect.left + rect.width / 2);
+    const cy = midY - (rect.top + rect.height / 2);
+    lbZoomTo(lbTouchScale0 * (dist / lbTouchDist0), cx, cy);
+  } else if (e.touches.length === 1 && lbDragging) {
+    const dx = e.touches[0].clientX - lbDragStartX;
+    const dy = e.touches[0].clientY - lbDragStartY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) lbMouseMoved = true;
+    lbTx = lbDragStartTx + dx;
+    lbTy = lbDragStartTy + dy;
+    lbConstrainPan(); lbApplyTransform();
+  }
+}, { passive: false });
+
+$lbImg.addEventListener('touchend', () => {
+  lbDragging = false; lbTouchDist0 = null;
+});
+
+// Resize: re-constrain
+window.addEventListener('resize', () => {
+  if (!$lightbox.classList.contains('open')) return;
+  if (lbScale > 1) { lbConstrainPan(); lbApplyTransform(); }
+});
+
+// ---- Lightbox ----
+function openLightbox(index) {
+  lbIndex = index;
+  showLightboxImage();
+  $lightbox.classList.add('open');
+}
+
+function showLightboxImage() {
+  const entry = currentImages[lbIndex];
+  if (!entry) return;
+
+  // Crossfade: snapshot current image into prev layer
+  const isOpen = $lightbox.classList.contains('open');
+  if (isOpen && $lbImg.src && $lbImg.naturalWidth > 0) {
+    $lbImgPrev.src = $lbImg.src;
+    $lbImgPrev.style.transition = 'none';
+    $lbImgPrev.style.opacity = '1';
+    void $lbImgPrev.offsetHeight; // force reflow so snap is committed
+    $lbImgPrev.style.transition = '';
+  }
+
+  lbResetZoom();
+  // Revoke previous full-size URL (unless it's in preload cache)
+  if (lbCurrentUrl && !lbPreloadCache.has(lbIndex)) {
+    URL.revokeObjectURL(lbCurrentUrl);
+  }
+  lbCurrentUrl = null;
+  // Use preloaded URL if available, otherwise create new
+  if (lbPreloadCache.has(lbIndex)) {
+    lbCurrentUrl = lbPreloadCache.get(lbIndex);
+  } else {
+    lbCurrentUrl = URL.createObjectURL(entry.file);
+  }
+  lbPreloadCache.set(lbIndex, lbCurrentUrl);
+  $lbImg.onload = () => {
+    lbLayoutW = $lbImg.offsetWidth;
+    lbLayoutH = $lbImg.offsetHeight;
+    $lbImg.className = 'zoom-in-cursor';
+    // Fade out the previous image layer
+    $lbImgPrev.style.opacity = '0';
+  };
+  $lbImg.src = lbCurrentUrl;
+  $lbInfo.textContent = `${entry.name}  (${lbIndex + 1} / ${currentImages.length})`;
+  lbPreloadAdjacent();
+  if (exifPanelOpen) updateExifPanel();
+}
+
+function closeLightbox() {
+  $lightbox.classList.remove('open');
+  lbResetZoom();
+  // Clear crossfade layer
+  $lbImgPrev.src = '';
+  $lbImgPrev.style.opacity = '0';
+  // Revoke all preloaded URLs
+  for (const [, url] of lbPreloadCache) URL.revokeObjectURL(url);
+  lbPreloadCache.clear();
+  lbCurrentUrl = null;
+  // Close EXIF panel
+  exifPanelOpen = false;
+  $exifPanel.classList.remove('open');
+  $infoBtn.classList.remove('active');
+}
+
+function lbPrev() {
+  if (currentImages.length === 0) return;
+  lbIndex = (lbIndex - 1 + currentImages.length) % currentImages.length;
+  showLightboxImage();
+}
+
+function lbNext() {
+  if (currentImages.length === 0) return;
+  lbIndex = (lbIndex + 1) % currentImages.length;
+  showLightboxImage();
+}
+
+$lightbox.querySelector('.close-btn').addEventListener('click', closeLightbox);
+$lightbox.querySelector('.nav-prev').addEventListener('click', lbPrev);
+$lightbox.querySelector('.nav-next').addEventListener('click', lbNext);
+$lightbox.addEventListener('click', e => { if (e.target === $lightbox && !lbMouseMoved) closeLightbox(); });
+
+document.addEventListener('keydown', e => {
+  if (!$lightbox.classList.contains('open')) return;
+  if (e.key === 'Escape') closeLightbox();
+  else if (e.key === 'ArrowLeft') lbPrev();
+  else if (e.key === 'ArrowRight') lbNext();
+  else if (e.key === '+' || e.key === '=') lbZoomTo(lbScale * LB_ZOOM_STEP, 0, 0);
+  else if (e.key === '-') lbZoomTo(lbScale / LB_ZOOM_STEP, 0, 0);
+  else if (e.key === '0') { lbScale = 1; lbTx = 0; lbTy = 0; lbConstrainPan(); lbApplyTransform(); lbShowZoom(); }
+  else if (e.key === 'i' || e.key === 'I') toggleExifPanel();
+});
+
+// ---- Utility ----
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>
