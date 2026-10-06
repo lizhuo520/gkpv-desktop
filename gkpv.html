@@ -1505,6 +1505,11 @@ async function renderDirectory() {
       await loadAspectRatios(currentDirPath, imgEntries, gen);
       if (gen !== thumbGeneration) return;
 
+      // 预测量：只读文件头拿宽高比，让下面的布局一次到位。
+      // 否则布局只能按正方形猜，再靠解码缩略图一张张纠正、反复重排。
+      await premeasureAspects(imgEntries, gen);
+      if (gen !== thumbGeneration) return;
+
       recalculateLayout();
       setupVirtualScroll();
       renderVisibleRows();
@@ -1544,6 +1549,51 @@ async function loadAspectRatios(dirPath, entries, gen) {
       entry.aspect = ratios[key].w / ratios[key].h;
     }
   }
+}
+
+// ---- 预测量：只读文件头拿宽高比 ----
+// readImageSize() 只读前 256KB，拿不到会返回 null，此时保持 width=0，
+// 交给后面的缩略图流程兜底 —— 所以这条路走不通也不会比原来更差。
+const PREMEASURE_CONCURRENCY = 24;
+
+async function premeasureAspects(entries, gen) {
+  // 注意：条目初始化时 aspect 就是 1（正方形），只有 width=0 才代表"还没测过"
+  const todo = entries.filter(e => !(e.width > 0));
+  if (!todo.length) return;
+
+  let cursor = 0;
+  let done = 0;
+  const total = todo.length;
+
+  async function worker() {
+    while (cursor < todo.length) {
+      const entry = todo[cursor++];
+      if (gen !== thumbGeneration) return;
+      try {
+        const s = await readImageSize(entry.file);
+        if (s && s.w > 0 && s.h > 0) {
+          entry.width = s.w;
+          entry.height = s.h;
+          entry.aspect = s.w / s.h;
+        }
+      } catch (e) { /* 测不到就留给缩略图阶段 */ }
+      done++;
+      if (gen === thumbGeneration) {
+        $counter.textContent = `正在测量尺寸 (${done}/${total})…`;
+      }
+    }
+  }
+
+  const workers = [];
+  const n = Math.min(PREMEASURE_CONCURRENCY, total);
+  for (let i = 0; i < n; i++) workers.push(worker());
+  await Promise.all(workers);
+  if (gen !== thumbGeneration) return;
+
+  // 落盘缓存：下次进同一目录连文件头都不用读，直接命中
+  saveAspectRatios(currentDirPath, entries);
+  // 恢复常规计数文案，别停在"正在测量尺寸"
+  updateCounterLabel(entries.length, currentFolderCount);
 }
 
 async function saveAspectRatios(dirPath, entries) {
