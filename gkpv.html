@@ -400,6 +400,30 @@
   /* ---------- sort ---------- */
   #sortSelect { min-width: 100px; }
 
+#recursiveBtn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* 递归模式下卡片左上角的「来源子文件夹」标注 */
+.subfolder-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: #fff;
+  background: rgba(0, 0, 0, .62);
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
   /* ---------- shimmer placeholder ---------- */
   @keyframes shimmer {
     0%   { background-position: -200% 0; }
@@ -542,6 +566,7 @@
     <option value="date-new">Newest</option>
     <option value="date-old">Oldest</option>
   </select>
+  <button id="recursiveBtn" title="Include images from every subfolder">Subfolders: Off</button>
   <button id="clearCacheBtn" title="Clear thumbnail cache">Clear Cache</button>
   <span id="counter"></span>
 </div>
@@ -598,6 +623,16 @@ let currentFolderCount = 0;
 let currentDirPath = '';
 let thumbQueue = [], thumbQueueIdx = 0, thumbWorkersRunning = 0;
 let relayoutTimer = null;
+let recursiveMode = false;   // 是否递归显示所有子文件夹里的图片
+
+// 计数器文案：递归时额外说明「含子文件夹」
+function updateCounterLabel(total, folders) {
+  const img = `${total} image${total !== 1 ? 's' : ''}`;
+  const fld = `${folders} folder${folders !== 1 ? 's' : ''}`;
+  $counter.textContent = recursiveMode
+    ? `${img} (incl. subfolders), ${fld}`
+    : `${img}, ${fld}`;
+}
 
 // OPFS cache state
 let cacheDir = null;      // FileSystemDirectoryHandle for gkpv-thumbs in OPFS
@@ -615,6 +650,7 @@ const $lbInfo    = document.getElementById('lbInfo');
 const $crumbs    = document.getElementById('breadcrumbs');
 const $counter   = document.getElementById('counter');
 const $sort      = document.getElementById('sortSelect');
+const $recursive = document.getElementById('recursiveBtn');
 
 // ---- Card tooltip ----
 const $tooltip = document.getElementById('cardTooltip');
@@ -812,10 +848,14 @@ async function getDirHandle(path) {
   return h;
 }
 
-// ---- Scan a single directory level ----
-async function scanDir(dirHandle) {
+// ---- Scan a directory (single level, or the whole tree when recursive) ----
+const SCAN_LIMIT = 20000;   // 递归时的文件数上限，防止误选超大目录把内存吃光
+
+async function scanDir(dirHandle, recursive) {
+  const rootPath = currentPath.join('/');
   const folders = [];
   const images = [];
+
   for await (const [name, handle] of dirHandle) {
     if (name.startsWith('.')) continue;
     if (handle.kind === 'directory') {
@@ -824,10 +864,40 @@ async function scanDir(dirHandle) {
       const ext = name.split('.').pop().toLowerCase();
       if (IMAGE_EXTS.has(ext)) {
         const file = await handle.getFile();
-        images.push({ name, file, handle });
+        // rel 记录相对根目录的路径（含文件名），dirPath 用于缩略图缓存去重
+        images.push({ name, file, handle, rel: name, dirPath: rootPath });
       }
     }
   }
+
+  if (recursive) {
+    // 广度优先遍历所有子目录，把里面的图摊平到同一层
+    const queue = folders.map(f => ({ handle: f.handle, rel: f.name }));
+    while (queue.length && images.length < SCAN_LIMIT) {
+      const cur = queue.shift();
+      for await (const [name, h] of cur.handle) {
+        if (name.startsWith('.')) continue;
+        const childRel = cur.rel + '/' + name;
+        if (h.kind === 'directory') {
+          queue.push({ handle: h, rel: childRel });
+        } else {
+          const ext = name.split('.').pop().toLowerCase();
+          if (IMAGE_EXTS.has(ext)) {
+            const file = await h.getFile();
+            images.push({
+              name,
+              file,
+              handle: h,
+              rel: childRel,
+              dirPath: rootPath + '/' + cur.rel,
+            });
+            if (images.length >= SCAN_LIMIT) break;
+          }
+        }
+      }
+    }
+  }
+
   return { folders, images };
 }
 
@@ -835,12 +905,14 @@ async function scanDir(dirHandle) {
 function sortItems(items) {
   const order = $sort.value;
   const copy = [...items];
+  // 递归模式下按「子目录/文件名」排序，让同一文件夹的图聚在一起
+  const key = (x) => (recursiveMode && x.rel ? x.rel : x.name);
   switch (order) {
     case 'name-asc':
-      copy.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      copy.sort((a, b) => key(a).localeCompare(key(b), undefined, { numeric: true }));
       break;
     case 'name-desc':
-      copy.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
+      copy.sort((a, b) => key(b).localeCompare(key(a), undefined, { numeric: true }));
       break;
     case 'date-new':
       copy.sort((a, b) => (b.file?.lastModified || 0) - (a.file?.lastModified || 0));
@@ -853,6 +925,23 @@ function sortItems(items) {
 }
 
 $sort.addEventListener('change', renderDirectory);
+
+// ---- Recursive (subfolders) toggle ----
+function syncRecursiveBtn() {
+  $recursive.classList.toggle('active', recursiveMode);
+  $recursive.textContent = recursiveMode ? 'Subfolders: On' : 'Subfolders: Off';
+}
+
+$recursive.addEventListener('click', () => {
+  recursiveMode = !recursiveMode;
+  try { localStorage.setItem('gkpv-recursive', recursiveMode ? '1' : '0'); } catch (e) {}
+  syncRecursiveBtn();
+  renderDirectory();
+});
+
+// 恢复上次的开关状态
+try { recursiveMode = localStorage.getItem('gkpv-recursive') === '1'; } catch (e) {}
+syncRecursiveBtn();
 
 // ---- Layout calculators ----
 function getTargetRowHeight() {
@@ -970,6 +1059,13 @@ function createRowElement(row, gen) {
     lbl.className = 'label';
     lbl.textContent = entry.name;
     card.appendChild(lbl);
+    // 递归模式下标出来源子文件夹（顶层文件的 rel 里没有 /，就不标）
+    if (recursiveMode && entry.rel && entry.rel.indexOf('/') >= 0) {
+      const sub = document.createElement('span');
+      sub.className = 'subfolder-badge';
+      sub.textContent = entry.rel.slice(0, entry.rel.lastIndexOf('/'));
+      card.appendChild(sub);
+    }
     const idx = item.imageIndex;
     card.addEventListener('click', () => openLightbox(idx));
     attachTooltip(card, entry);
@@ -1086,7 +1182,7 @@ function startThumbWorkers() {
         const entry = currentImages[idx];
         if (entry.thumbUrl) continue;
         try {
-          const thumbResult = await getOrCreateThumb(currentDirPath, entry.file);
+          const thumbResult = await getOrCreateThumb(entry.dirPath || currentDirPath, entry.file);
           if (gen !== thumbGeneration) { URL.revokeObjectURL(thumbResult.url); break; }
           entry.thumbUrl = thumbResult.url;
           currentThumbUrls.push(thumbResult.url);
@@ -1111,7 +1207,7 @@ function startThumbWorkers() {
         const total = currentImages.length;
         if (gen === thumbGeneration) {
           if (done < total) $counter.textContent = `Generating thumbnails (${done}/${total})...`;
-          else $counter.textContent = `${total} image${total !== 1 ? 's' : ''}, ${currentFolderCount} folder${currentFolderCount !== 1 ? 's' : ''}`;
+          else updateCounterLabel(total, currentFolderCount);
         }
       }
       thumbWorkersRunning--;
@@ -1217,7 +1313,7 @@ async function renderDirectory() {
 
   try {
     const dirHandle = await getDirHandle(currentPath);
-    const { folders, images } = await scanDir(dirHandle);
+    const { folders, images } = await scanDir(dirHandle, recursiveMode);
 
     if (gen !== thumbGeneration) return;
 
@@ -1231,6 +1327,8 @@ async function renderDirectory() {
     const imgEntries = sortedImages.map(img => ({
       name: img.name,
       file: img.file,
+      rel: img.rel,
+      dirPath: img.dirPath,
       thumbUrl: null,
       width: 0,
       height: 0,
@@ -1292,7 +1390,7 @@ async function renderDirectory() {
     }
 
     // Counter & breadcrumbs
-    $counter.textContent = `${imgEntries.length} image${imgEntries.length !== 1 ? 's' : ''}, ${sortedFolders.length} folder${sortedFolders.length !== 1 ? 's' : ''}`;
+    updateCounterLabel(imgEntries.length, sortedFolders.length);
     renderBreadcrumbs();
 
     $loading.classList.remove('show');
