@@ -594,7 +594,9 @@
 </div>
 
 <script>
-const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','bmp','webp','avif','svg','ico','tiff','tif','heic']);
+const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','bmp','webp','avif','svg','ico','tiff','tif','heic',
+  // 相机 RAW：靠内嵌 JPEG 预览出图，见 readRawPreview()
+  'cr2','cr3','crw','nef','nrw','arw','srf','sr2','dng','raf','orf','rw2','pef','srw','erf','kdc','dcr','mos','mrw','mef','3fr','iiq','rwl','r3d','x3f','raw']);
 
 // Thumbnail constants
 const THUMB_MAX = 640;
@@ -814,7 +816,115 @@ function isSaneSize(s) {
   return s && s.w > 0 && s.h > 0 && s.w < 200000 && s.h < 200000;
 }
 
+// ---- 相机 RAW：从 TIFF 容器里抠出内嵌 JPEG 预览 ----
+// 主流 RAW（CR2/NEF/ARW/DNG/RAF/ORF/RW2...）都是 TIFF 结构，IFD0 里的
+// ThumbOffset(0x0201)/ThumbLength(0x0202) 指向相机内嵌的 JPEG。
+// 直接 slice 出来给浏览器解码，不用 demosaic、不用 WASM。
+// 拿不到就返回 null，调用方照原样处理 —— 不会让现有格式变差。
+const RAW_EXT_SET = new Set(['cr2', 'cr3', 'crw', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'dng', 'raf', 'orf', 'rw2', 'pef', 'srw', 'erf', 'kdc', 'dcr', 'mos', 'mrw', 'mef', '3fr', 'iiq', 'rwl', 'r3d', 'x3f', 'raw']);
+const RAW_HEAD = 262144;                 // 256 KB 足够覆盖 IFD0/ExifIFD/SubIFD
+const rawPreviewCache = new WeakMap();   // File -> {blob, w, h}，避免重复读
+
+function isRawName(name) {
+  const i = String(name).lastIndexOf('.');
+  if (i < 0) return false;
+  return RAW_EXT_SET.has(String(name).slice(i + 1).toLowerCase());
+}
+
+async function readRawPreview(file) {
+  const hit = rawPreviewCache.get(file);
+  if (hit) return hit;
+  try {
+    const buf = new Uint8Array(await file.slice(0, RAW_HEAD).arrayBuffer());
+    const dv = new DataView(buf.buffer);
+    const n = buf.length;
+    if (n < 16) return null;
+
+    // TIFF 头：II*\0 小端 / MM\0* 大端
+    let le = null;
+    if (buf[0] === 0x49 && buf[1] === 0x49 && buf[2] === 0x2a && buf[3] === 0x00) le = true;
+    else if (buf[0] === 0x4d && buf[1] === 0x4d && buf[2] === 0x00 && buf[3] === 0x2a) le = false;
+    else return null;
+
+    // 遍历一个 IFD，抽出关心的标签
+    const scan = (off) => {
+      const out = {};
+      if (off + 2 > n) return out;
+      const cnt = dv.getUint16(off, le);
+      for (let i = 0; i < cnt; i++) {
+        const p = off + 2 + i * 12;
+        if (p + 12 > n) break;
+        out[dv.getUint16(p, le)] = dv.getUint32(p + 8, le);
+      }
+      return out;
+    };
+
+    const t0 = scan(dv.getUint32(4, le));
+
+    // 真实尺寸：优先 ExifIFD 的 PixelXDimension/PixelYDimension，
+    // 其次 SubIFD 的 ImageWidth/ImageLength，最后退回预览图尺寸
+    let w = 0, h = 0;
+    if (t0[0x8769]) {
+      const ex = scan(t0[0x8769]);
+      w = ex[0xA002] || 0; h = ex[0xA003] || 0;
+    }
+    if (!(w > 0 && h > 0) && t0[0x014A]) {
+      const sub = scan(t0[0x014A]);
+      w = sub[0x0100] || 0; h = sub[0x0101] || 0;
+    }
+    if (!(w > 0 && h > 0) && t0[0x0100] && t0[0x0101]) {
+      w = t0[0x0100]; h = t0[0x0101];
+    }
+
+    const off = t0[0x0201] || 0;
+    const len = t0[0x0202] || 0;
+    // 内嵌预览一般不会超过 8 MB，超了多半是解析错了
+    if (!(off > 0 && len > 0) || len > 8 * 1024 * 1024) return null;
+
+    const bytes = new Uint8Array(await file.slice(off, off + len).arrayBuffer());
+    // 必须是 JPEG 才能交给浏览器解码
+    if (bytes.length < 4 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) return null;
+
+    // 拿不到真实尺寸就用预览图的（比例一致，够布局用）
+    if (!(w > 0 && h > 0)) {
+      const s = await readImageSize({ slice: async () => ({ arrayBuffer: async () => bytes.buffer }) });
+      if (s) { w = s.w; h = s.h; }
+    }
+    if (!(w > 0 && h > 0)) return null;
+
+    const res = { blob: new Blob([bytes], { type: 'image/jpeg' }), w, h };
+    rawPreviewCache.set(file, res);
+    return res;
+  } catch (e) {
+    return null;
+  }
+}
+
+// lightbox 用：RAW 给内嵌预览，其它格式给原文件
+function fullBlobFor(entry) {
+  const pv = entry && entry.file ? rawPreviewCache.get(entry.file) : null;
+  return pv ? pv.blob : entry.file;
+}
+
 async function generateThumb(file) {
+  // RAW：走内嵌 JPEG 预览，别让浏览器去啃解不了的传感器数据
+  if (isRawName(file && file.name)) {
+    const pv = await readRawPreview(file);
+    if (!pv) throw new Error('无法从 RAW 中取出内嵌预览图');
+    const portrait = pv.h > pv.w;
+    const bmp = await createImageBitmap(pv.blob, portrait
+      ? { resizeHeight: THUMB_MAX, resizeQuality: 'high' }
+      : { resizeWidth: THUMB_MAX, resizeQuality: 'high' });
+    const scale = Math.min(1, THUMB_MAX / Math.max(pv.w, pv.h));
+    const tw = Math.max(1, Math.round(pv.w * scale));
+    const th = Math.max(1, Math.round(pv.h * scale));
+    const canvas = new OffscreenCanvas(tw, th);
+    canvas.getContext('2d').drawImage(bmp, 0, 0, tw, th);
+    bmp.close();
+    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: THUMB_QUALITY });
+    return { blob, width: pv.w, height: pv.h };
+  }
+
   const declared = await readImageSize(file);
 
   if (isSaneSize(declared)) {
@@ -1570,7 +1680,10 @@ async function premeasureAspects(entries, gen) {
       const entry = todo[cursor++];
       if (gen !== thumbGeneration) return;
       try {
-        const s = await readImageSize(entry.file);
+        // RAW 解不出尺寸头，改用内嵌预览图的尺寸（比例一致，够布局用）
+        const s = isRawName(entry.name)
+          ? await readRawPreview(entry.file)
+          : await readImageSize(entry.file);
         if (s && s.w > 0 && s.h > 0) {
           entry.width = s.w;
           entry.height = s.h;
@@ -1819,7 +1932,7 @@ function lbPreloadAdjacent() {
     if (!lbPreloadCache.has(idx)) {
       const entry = currentImages[idx];
       if (entry) {
-        const url = URL.createObjectURL(entry.file);
+        const url = URL.createObjectURL(fullBlobFor(entry));
         lbPreloadCache.set(idx, url);
         const img = new Image();
         img.src = url; // trigger browser decode
@@ -2050,7 +2163,7 @@ function showLightboxImage() {
   if (lbPreloadCache.has(lbIndex)) {
     lbCurrentUrl = lbPreloadCache.get(lbIndex);
   } else {
-    lbCurrentUrl = URL.createObjectURL(entry.file);
+    lbCurrentUrl = URL.createObjectURL(fullBlobFor(entry));
   }
   lbPreloadCache.set(lbIndex, lbCurrentUrl);
   $lbImg.onload = () => {
