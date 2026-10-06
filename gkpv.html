@@ -262,6 +262,26 @@
   }
   #lbZoom.visible { opacity: 1; }
 
+  /* ---------- 光箱失败提示（HEIC / RAW 无内嵌预览等） ---------- */
+  #lightbox .lb-msg {
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 70vw;
+    padding: 16px 24px;
+    background: rgba(0, 0, 0, .82);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.6;
+    text-align: center;
+    z-index: 208;
+  }
+  #lightbox .lb-msg.show { display: block; }
+
   .info-btn {
     position: absolute;
     top: 16px;
@@ -450,6 +470,24 @@
     opacity: 1;
   }
 
+  /* ---------- 浏览器无法解码的格式（HEIC/HEIF）---------- */
+  .card.unsupported {
+    background: repeating-linear-gradient(45deg, var(--bg-secondary) 0 10px, var(--bg-hover) 10px 20px);
+  }
+  .card .unsupported-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 2px 8px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    background: rgba(0, 0, 0, .35);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
   /* ---------- layout toggle ---------- */
   .layout-group {
     display: flex;
@@ -590,6 +628,7 @@
   <img id="lbImgPrev" src="" alt="" draggable="false">
   <img id="lbImg" src="" alt="" draggable="false">
   <div id="lbZoom"></div>
+  <div id="lbMsg" class="lb-msg"></div>
   <div class="info" id="lbInfo"></div>
 </div>
 
@@ -602,6 +641,28 @@ const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','bmp','webp','avif','svg','
 const THUMB_MAX = 640;
 const THUMB_QUALITY = 0.8;
 const THUMB_CONCURRENCY = 8;
+
+// 缩略图/尺寸缓存的内容版本号（改动缓存语义时递增，见 cacheKey）
+const CACHE_VERSION = 'v2';
+
+// ---- 格式分类辅助 ----
+// Chromium 完全不能解码的格式：<img> / createImageBitmap / ImageDecoder 三条路都不支持。
+// 与其让缩略图静默失败、卡片永远是空白的，不如显式标出来（见 createRowElement）。
+const NO_DECODE_EXTS = new Set(['heic', 'heif']);
+
+// createImageBitmap 的 imageOrientation 默认值在历史上变过（'none' -> 'from-image'），
+// 不同内核、不同版本行为不一致。这里统一显式声明「按 EXIF 方向解码」，
+// 保证缩略图与光箱（<img> 默认就是 from-image）的朝向永远一致。
+const BITMAP_OPTS = { imageOrientation: 'from-image' };
+
+// 取小写扩展名（无扩展名返回空串）
+function extOf(name) {
+  const i = String(name).lastIndexOf('.');
+  return i < 0 ? '' : String(name).slice(i + 1).toLowerCase();
+}
+
+function isNoDecodeName(name) { return NO_DECODE_EXTS.has(extOf(name)); }
+function isSvgName(name) { return extOf(name) === 'svg'; }
 
 let rootHandle = null;   // FileSystemDirectoryHandle for the root
 let currentPath = [];     // path segments from root
@@ -629,14 +690,18 @@ let thumbFailedCount = 0; // 失败数。失败也必须计入 done，否则计�
 let thumbFailedNames = [];
 let relayoutTimer = null;
 let recursiveMode = false;   // 是否递归显示所有子文件夹里的图片
+let scanTruncated = false;   // 本次扫描是否因 SCAN_LIMIT 被截断（决定计数器要不要提示）
 
 // 计数器文案：递归时额外说明「含子文件夹」
 function updateCounterLabel(total, folders) {
   const img = `${total} 张图片`;
   const fld = `${folders} 个文件夹`;
-  $counter.textContent = recursiveMode
+  let text = recursiveMode
     ? `${img}（含子文件夹），${fld}`
     : `${img}，${fld}`;
+  // 被 SCAN_LIMIT 截断时必须说清楚，否则用户会以为图少了
+  if (scanTruncated) text += `（已达 ${SCAN_LIMIT} 张上限，未显示全部）`;
+  $counter.textContent = text;
 }
 
 // OPFS cache state
@@ -652,6 +717,7 @@ const $lightbox  = document.getElementById('lightbox');
 const $lbImg     = document.getElementById('lbImg');
 const $lbImgPrev = document.getElementById('lbImgPrev');
 const $lbInfo    = document.getElementById('lbInfo');
+const $lbMsg     = document.getElementById('lbMsg');
 const $crumbs    = document.getElementById('breadcrumbs');
 const $counter   = document.getElementById('counter');
 const $sort      = document.getElementById('sortSelect');
@@ -701,8 +767,16 @@ async function initCache() {
 }
 
 function cacheKey(dirPath, file) {
-  const raw = `${dirPath}/${file.name}_${file.size}_${file.lastModified}`;
+  // 带上缓存版本号：只要"缓存内容的语义"变了就递增，旧条目会被自动忽略（自愈，不用手动清缓存）。
+  // v2 的原因：EXIF 方向修复前，竖拍的图是按"方向算反的尺寸"生成缩略图的
+  //（把已经转正的位图画进了宽高反过来的 canvas 里 → 图被压扁），尺寸 sidecar 也是反的。
+  const raw = `${CACHE_VERSION}/${dirPath}/${file.name}_${file.size}_${file.lastModified}`;
   return raw.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
+}
+
+// 宽高比缓存的 key（读写都要用它，避免两处写法漂移）
+function arCacheKey(dirPath) {
+  return `ar_${CACHE_VERSION}_` + dirPath.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 180);
 }
 
 async function getCachedThumb(key) {
@@ -756,6 +830,8 @@ function formatSize(bytes) {
 
 // ---- Thumbnail Generation ----
 // ---- 只读文件头拿像素尺寸（不解码整图，便宜得多）----
+// 返回的 w/h 是「显示尺寸」：JPEG 若带 Orientation(0x0112)=5~8，宽高已经互换过，
+// 这样算出来的宽高比才与实际解码结果、以及 <img> 的朝向一致（见 readTiffOrientation）。
 // 拿不到就返回 null，调用方回退到全图解码，保证不会比原来更差。
 async function readImageSize(file) {
   try {
@@ -763,6 +839,9 @@ async function readImageSize(file) {
     const buf = new Uint8Array(await file.slice(0, HEAD).arrayBuffer());
     const dv = new DataView(buf.buffer);
     const n = buf.length;
+
+    // SVG 是矢量图、没有固有像素尺寸；HEIC 浏览器根本解不了 —— 都不在这里解析
+    if (isNoDecodeName(file.name) || isSvgName(file.name)) return null;
 
     // PNG：IHDR 固定在第 16 字节
     if (n > 24 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
@@ -797,15 +876,27 @@ async function readImageSize(file) {
       }
     }
     // JPEG：逐个 marker 扫到 SOFn（排除 C4=DHT / C8=JPG / CC=DAC）
+    // 顺路取 APP1 里的 Orientation(0x0112)：同一个 256KB 头里就能拿到，不用再读一次盘
     if (n > 4 && buf[0] === 0xFF && buf[1] === 0xD8) {
       let i = 2;
+      let orientation = 0;
       while (i < n - 9) {
         if (buf[i] !== 0xFF) { i++; continue; }
         const m = buf[i + 1];
         if (m === 0xFF) { i++; continue; }
         if (m >= 0xD0 && m <= 0xD9) { i += 2; continue; }   // 无长度字段的 marker
+        if (m === 0xE1 && !orientation) {
+          // APP1：「Exif\0\0」之后就是 TIFF 头（可能是缩略图的 APP1，所以只在没取到时试）
+          const p = i + 4;
+          if (p + 8 <= n && dv.getUint32(p) === 0x45786966 && dv.getUint16(p + 4) === 0) {
+            orientation = readTiffOrientation(dv, n, p + 6);
+          }
+        }
         if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) {
-          return { h: dv.getUint16(i + 5), w: dv.getUint16(i + 7) };
+          let h = dv.getUint16(i + 5), w = dv.getUint16(i + 7);
+          // Orientation 5~8 = 需要转 90°，实际显示时宽高是反的
+          if (orientation >= 5 && orientation <= 8) { const t = w; w = h; h = t; }
+          return { w, h, o: orientation || 1 };
         }
         i += 2 + dv.getUint16(i + 2);                        // 跳过本段
       }
@@ -818,6 +909,29 @@ function isSaneSize(s) {
   return s && s.w > 0 && s.h > 0 && s.w < 200000 && s.h < 200000;
 }
 
+// 从 TIFF 头里读 IFD0 的 Orientation(0x0112)。
+// t 指向 'II'/'MM' 标志；只认 SHORT(type=3)，取值 1~8，读不到返回 0（等价于「未标注方向」）。
+// 专门抽出来是因为：createImageBitmap 会按这个值旋转像素，如果解析尺寸时不跟着换算，
+// 得到的宽高比就和真正解码出来的图互为倒数（竖拍照片会一直走全解码慢路径）。
+function readTiffOrientation(dv, n, t) {
+  if (t + 8 > n) return 0;
+  const bo = dv.getUint16(t);
+  if (bo !== 0x4949 && bo !== 0x4D4D) return 0;
+  const le = bo === 0x4949;
+  const ifd = dv.getUint32(t + 4, le);
+  if (t + ifd + 2 > n) return 0;
+  const cnt = dv.getUint16(t + ifd, le);
+  for (let i = 0; i < cnt; i++) {
+    const p = t + ifd + 2 + i * 12;
+    if (p + 12 > n) break;
+    if (dv.getUint16(p, le) === 0x0112) {
+      const v = dv.getUint16(p + 8, le);   // SHORT 只占前 2 字节
+      return v >= 1 && v <= 8 ? v : 0;
+    }
+  }
+  return 0;
+}
+
 // ---- 相机 RAW：从 TIFF 容器里抠出内嵌 JPEG 预览 ----
 // 主流 RAW（CR2/NEF/ARW/DNG/RAF/ORF/RW2...）都是 TIFF 结构，IFD0 里的
 // ThumbOffset(0x0201)/ThumbLength(0x0202) 指向相机内嵌的 JPEG。
@@ -828,9 +942,7 @@ const RAW_HEAD = 262144;                 // 256 KB 足够覆盖 IFD0/ExifIFD/Sub
 const rawPreviewCache = new WeakMap();   // File -> {blob, w, h}，避免重复读
 
 function isRawName(name) {
-  const i = String(name).lastIndexOf('.');
-  if (i < 0) return false;
-  return RAW_EXT_SET.has(String(name).slice(i + 1).toLowerCase());
+  return RAW_EXT_SET.has(extOf(name));
 }
 
 async function readRawPreview(file) {
@@ -842,13 +954,12 @@ async function readRawPreview(file) {
     const n = buf.length;
     if (n < 16) return null;
 
-    // TIFF 头：II*\0 小端 / MM\0* 大端
     let le = null;
     if (buf[0] === 0x49 && buf[1] === 0x49 && buf[2] === 0x2a && buf[3] === 0x00) le = true;
     else if (buf[0] === 0x4d && buf[1] === 0x4d && buf[2] === 0x00 && buf[3] === 0x2a) le = false;
     else return null;
 
-    // 遍历一个 IFD，抽出关心的标签
+    // 按 TIFF 类型取值：SHORT(type=3) 只占前 2 字节，不能整 4 字节读
     const scan = (off) => {
       const out = {};
       if (off + 2 > n) return out;
@@ -856,40 +967,78 @@ async function readRawPreview(file) {
       for (let i = 0; i < cnt; i++) {
         const p = off + 2 + i * 12;
         if (p + 12 > n) break;
-        out[dv.getUint16(p, le)] = dv.getUint32(p + 8, le);
+        const tag = dv.getUint16(p, le);
+        const typ = dv.getUint16(p + 2, le);
+        const c = dv.getUint32(p + 4, le);
+        out[tag] = { typ, cnt: c, v: typ === 3 ? dv.getUint16(p + 8, le) : dv.getUint32(p + 8, le) };
       }
       return out;
     };
 
     const t0 = scan(dv.getUint32(4, le));
 
-    // 真实尺寸：优先 ExifIFD 的 PixelXDimension/PixelYDimension，
-    // 其次 SubIFD 的 ImageWidth/ImageLength，最后退回预览图尺寸
+    // SubIFDs 可能是数组（尼康 cnt=3），也可能只有 1 个
+    const subIfdOffsets = () => {
+      const s = t0[0x014A];
+      if (!s) return [];
+      if (s.cnt > 1) {
+        const base = s.v;
+        const out = [];
+        for (let i = 0; i < s.cnt; i++) {
+          if (base + 4 * s.cnt > n) break;
+          out.push(dv.getUint32(base + 4 * i, le));
+        }
+        return out;
+      }
+      return [s.v];
+    };
+    const subs = subIfdOffsets().map(scan);
+
+    // 收集所有 JPEG 预览候选（IFD0 + 每个 SubIFD）
+    const cands = [];
+    for (const e of [t0, ...subs]) {
+      const o = e[0x0201], l = e[0x0202];
+      if (o && l && o.v > 0 && l.v > 0) cands.push([o.v, l.v]);
+    }
+    // 真实尺寸：ExifIFD 优先，其次 SubIFD 里最大的，再其次 IFD0
     let w = 0, h = 0;
     if (t0[0x8769]) {
-      const ex = scan(t0[0x8769]);
-      w = ex[0xA002] || 0; h = ex[0xA003] || 0;
+      const ex = scan(t0[0x8769].v);
+      if (ex[0xA002] && ex[0xA003] && ex[0xA002].v > 0 && ex[0xA003].v > 0) {
+        w = ex[0xA002].v; h = ex[0xA003].v;
+      }
     }
-    if (!(w > 0 && h > 0) && t0[0x014A]) {
-      const sub = scan(t0[0x014A]);
-      w = sub[0x0100] || 0; h = sub[0x0101] || 0;
+    if (!(w > 0 && h > 0)) {
+      for (const e of subs) {
+        const iw = e[0x0100], ih = e[0x0101];
+        if (iw && ih && iw.v > w && ih.v > 0) { w = iw.v; h = ih.v; }
+      }
     }
-    if (!(w > 0 && h > 0) && t0[0x0100] && t0[0x0101]) {
-      w = t0[0x0100]; h = t0[0x0101];
-    }
+    if (!(w > 0 && h > 0) && t0[0x0100] && t0[0x0101]) { w = t0[0x0100].v; h = t0[0x0101].v; }
 
-    const off = t0[0x0201] || 0;
-    const len = t0[0x0202] || 0;
-    // 内嵌预览一般不会超过 8 MB，超了多半是解析错了
-    if (!(off > 0 && len > 0) || len > 8 * 1024 * 1024) return null;
+    // Orientation(0x0112)=5~8 表示要转 90°：IFD0 记的是传感器尺寸（未旋转），
+    // 而浏览器解码内嵌预览时会按方向转正，所以宽高必须互换，否则两者互为倒数
+    // —— 既让 justified 布局排错，也会让 generateThumb 里的宽高比校验一直失败。
+    // 必须放在下面「用预览图兜底」之前：那条路给出的已经是转正后的显示尺寸。
+    const orientation = t0[0x0112] && t0[0x0112].v >= 1 && t0[0x0112].v <= 8 ? t0[0x0112].v : 1;
+    if (orientation >= 5 && orientation <= 8) { const t = w; w = h; h = t; }
 
-    const bytes = new Uint8Array(await file.slice(off, off + len).arrayBuffer());
+    // 选长度最小的候选。尼康会同时给出全尺寸(2.4MB)和预览(1MB)，
+    // 做 640px 缩略图用小的那个就够了。
+    cands.sort((a, b) => a[1] - b[1]);
+    let chosen = null;
+    for (const c of cands) {
+      if (c[1] > 8192 && c[1] <= 16 * 1024 * 1024) { chosen = c; break; }
+    }
+    if (!chosen) return null;
+
+    const bytes = new Uint8Array(await file.slice(chosen[0], chosen[0] + chosen[1]).arrayBuffer());
     // 必须是 JPEG 才能交给浏览器解码
     if (bytes.length < 4 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) return null;
 
-    // 拿不到真实尺寸就用预览图的（比例一致，够布局用）
     if (!(w > 0 && h > 0)) {
-      const s = await readImageSize({ slice: async () => ({ arrayBuffer: async () => bytes.buffer }) });
+      // 拿不到真实尺寸就用预览图的（比例一致，够布局用）
+      const s = await readImageSize({ slice: () => ({ arrayBuffer: async () => bytes.buffer }) });
       if (s) { w = s.w; h = s.h; }
     }
     if (!(w > 0 && h > 0)) return null;
@@ -902,30 +1051,96 @@ async function readRawPreview(file) {
   }
 }
 
-// lightbox 用：RAW 给内嵌预览，其它格式给原文件
-function fullBlobFor(entry) {
-  const pv = entry && entry.file ? rawPreviewCache.get(entry.file) : null;
-  return pv ? pv.blob : entry.file;
+
+// lightbox 用：给出「浏览器能解码的 Blob」。
+// 这里必须是 async 且按需读取：rawPreviewCache 只有当 readRawPreview() 真的跑过才有值，
+// 而缩略图命中 OPFS 缓存、或宽高比命中 ar_ 缓存时，那个函数一次都不会被调用。
+// 只查缓存就会复现「缩略图正常、双击打开一片空白」—— <img> 拿到的是 RAW 原始文件，
+// 浏览器解不了，于是什么都不显示。readRawPreview 内部有 WeakMap 缓存，重复调用不重复读盘。
+async function fullBlobFor(entry) {
+  if (!entry || !entry.file) return null;
+  if (isNoDecodeName(entry.file.name)) return null;   // HEIC 等：浏览器解不了，交给调用方提示
+  if (isRawName(entry.file.name)) {
+    const pv = await readRawPreview(entry.file);
+    return pv ? pv.blob : null;                       // 取不到内嵌预览 -> null
+  }
+  return entry.file;
+}
+
+// ---- SVG 缩略图 ----
+// createImageBitmap 不支持 SVG Blob（Chromium 官方 issue 40269670：SVG 渲染依赖 DOM，
+// 无法离主线程），只能走 <img> 解码。
+async function loadSvgImage(file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  try {
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error('SVG 解码失败'));
+      img.src = url;
+    });
+  } catch (e) {
+    URL.revokeObjectURL(url);   // 失败路径也要回收 URL
+    throw e;
+  }
+  return { img, url };
+}
+
+// 矢量图没有固有像素尺寸：naturalWidth 取不到就按 512 兜底
+async function generateSvgThumb(file) {
+  const { img, url } = await loadSvgImage(file);
+  try {
+    const ow = img.naturalWidth || 512;
+    const oh = img.naturalHeight || 512;
+    const scale = Math.min(1, THUMB_MAX / Math.max(ow, oh));
+    const w = Math.max(1, Math.round(ow * scale));
+    const h = Math.max(1, Math.round(oh * scale));
+    const canvas = new OffscreenCanvas(w, h);
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    // SVG 常带透明背景：用 PNG 保留透明度（JPEG 会把透明区域画成黑色）
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    return { blob, width: ow, height: oh };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 async function generateThumb(file) {
+  const name = file && file.name;
+
+  // 浏览器解不了的格式（HEIC/HEIF）直接抛错，让调用方标成「不支持」，
+  // 没必要白走一遍必然失败的解码
+  if (isNoDecodeName(name)) throw new Error(`浏览器无法解码 ${extOf(name).toUpperCase()} 格式`);
+
   // RAW：走内嵌 JPEG 预览，别让浏览器去啃解不了的传感器数据
-  if (isRawName(file && file.name)) {
+  if (isRawName(name)) {
     const pv = await readRawPreview(file);
     if (!pv) throw new Error('无法从 RAW 中取出内嵌预览图');
     const portrait = pv.h > pv.w;
-    const bmp = await createImageBitmap(pv.blob, portrait
-      ? { resizeHeight: THUMB_MAX, resizeQuality: 'high' }
-      : { resizeWidth: THUMB_MAX, resizeQuality: 'high' });
-    const scale = Math.min(1, THUMB_MAX / Math.max(pv.w, pv.h));
-    const tw = Math.max(1, Math.round(pv.w * scale));
-    const th = Math.max(1, Math.round(pv.h * scale));
+    // 显式按 EXIF 方向解码，避免出现「缩略图躺倒、光箱里却是正的」这种不一致
+    const bmp = await createImageBitmap(pv.blob, {
+      ...BITMAP_OPTS,
+      resizeQuality: 'high',
+      ...(portrait ? { resizeHeight: THUMB_MAX } : { resizeWidth: THUMB_MAX }),
+    });
+    // 输出尺寸按「实际位图」算：位图受 EXIF 方向影响，可能与 pv 记录的尺寸不一致，
+    // 拿 pv 的尺寸去 drawImage 会把图画变形
+    const scale = Math.min(1, THUMB_MAX / Math.max(bmp.width, bmp.height));
+    const tw = Math.max(1, Math.round(bmp.width * scale));
+    const th = Math.max(1, Math.round(bmp.height * scale));
+    const bw = bmp.width, bh = bmp.height;
     const canvas = new OffscreenCanvas(tw, th);
     canvas.getContext('2d').drawImage(bmp, 0, 0, tw, th);
     bmp.close();
     const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: THUMB_QUALITY });
-    return { blob, width: pv.w, height: pv.h };
+    // 尺寸优先报「相机真实尺寸」（信息面板更好看）；只有它和实际位图比例对不上（>2%）
+    // 时才以位图为准，否则 justified 布局会按错误的比例排版
+    const sameAR = pv.w > 0 && pv.h > 0 && Math.abs(pv.w / pv.h - bw / bh) / (bw / bh) < 0.02;
+    return sameAR ? { blob, width: pv.w, height: pv.h } : { blob, width: bw, height: bh };
   }
+
+  // SVG：createImageBitmap 不支持 SVG Blob，必须走 <img>（见 generateSvgThumb）
+  if (isSvgName(name)) return await generateSvgThumb(file);
 
   const declared = await readImageSize(file);
 
@@ -935,18 +1150,21 @@ async function generateThumb(file) {
     const portrait = oh > ow;
     let bmp = null;
     try {
-      // 只传一个维度，保持长宽比（两个都传会拉伸变形）
+      // 只传一个维度，保持长宽比（两个都传会拉伸变形）；并显式按 EXIF 方向解码
       bmp = needResize
-        ? await createImageBitmap(file, portrait
-            ? { resizeHeight: THUMB_MAX, resizeQuality: 'high' }
-            : { resizeWidth: THUMB_MAX, resizeQuality: 'high' })
-        : await createImageBitmap(file);
+        ? await createImageBitmap(file, {
+            ...BITMAP_OPTS,
+            resizeQuality: 'high',
+            ...(portrait ? { resizeHeight: THUMB_MAX } : { resizeWidth: THUMB_MAX }),
+          })
+        : await createImageBitmap(file, BITMAP_OPTS);
     } catch (e) {
       bmp = null;
     }
 
     if (bmp) {
-      // 校验：真实解码出来的宽高比必须和文件头解析的一致，否则说明解析不可信
+      // 校验：真实解码出来的宽高比必须和文件头解析的一致，否则说明解析不可信。
+      // （readImageSize 现在已把 EXIF 方向算进去，所以竖拍照片也能走这条快路径）
       const parsedAR = ow / oh;
       const realAR = bmp.width / bmp.height;
       if (Math.abs(realAR - parsedAR) / parsedAR < 0.02) {
@@ -963,8 +1181,8 @@ async function generateThumb(file) {
     }
   }
 
-  // 回退路径：与优化前完全一致的实现
-  const bitmap = await createImageBitmap(file);
+  // 回退路径：与优化前完全一致的实现（同样显式声明 EXIF 方向）
+  const bitmap = await createImageBitmap(file, BITMAP_OPTS);
   const origW = bitmap.width, origH = bitmap.height;
   let w = origW, h = origH;
   if (w > THUMB_MAX || h > THUMB_MAX) {
@@ -1062,25 +1280,28 @@ async function getDirHandle(path) {
 }
 
 // ---- Scan a directory (single level, or the whole tree when recursive) ----
-const SCAN_LIMIT = 20000;   // 递归时的文件数上限，防止误选超大目录把内存吃光
+// SCAN_LIMIT 是图片总数上限（顶层 + 递归一起算），防止误选整个盘把内存吃光
+const SCAN_LIMIT = 20000;
 
 async function scanDir(dirHandle, recursive) {
   const rootPath = currentPath.join('/');
   const folders = [];
   const images = [];
+  let dirCount = 0;         // 递归遍历到的子目录数（用于计数器里的"含子文件夹"）
+  let truncated = false;    // 是否被 SCAN_LIMIT 截断
 
   for await (const [name, handle] of dirHandle) {
     if (name.startsWith('.')) continue;
     if (handle.kind === 'directory') {
       folders.push({ name, handle });
-    } else {
-      const ext = name.split('.').pop().toLowerCase();
-      if (IMAGE_EXTS.has(ext)) {
-        const file = await handle.getFile();
-        // rel 记录相对根目录的路径（含文件名），dirPath 用于缩略图缓存去重
-        images.push({ name, file, handle, rel: name, dirPath: rootPath });
-      }
+      continue;
     }
+    if (!IMAGE_EXTS.has(extOf(name))) continue;
+    // 顶层同样要受上限约束（原来只限制递归部分，目录本身超 2 万张就守不住了）
+    if (images.length >= SCAN_LIMIT) { truncated = true; break; }
+    const file = await handle.getFile();
+    // rel 记录相对根目录的路径（含文件名），dirPath 用于缩略图缓存去重
+    images.push({ name, file, handle, rel: name, dirPath: rootPath });
   }
 
   if (recursive) {
@@ -1088,30 +1309,31 @@ async function scanDir(dirHandle, recursive) {
     const queue = folders.map(f => ({ handle: f.handle, rel: f.name }));
     while (queue.length && images.length < SCAN_LIMIT) {
       const cur = queue.shift();
+      dirCount++;
       for await (const [name, h] of cur.handle) {
         if (name.startsWith('.')) continue;
         const childRel = cur.rel + '/' + name;
         if (h.kind === 'directory') {
           queue.push({ handle: h, rel: childRel });
-        } else {
-          const ext = name.split('.').pop().toLowerCase();
-          if (IMAGE_EXTS.has(ext)) {
-            const file = await h.getFile();
-            images.push({
-              name,
-              file,
-              handle: h,
-              rel: childRel,
-              dirPath: rootPath + '/' + cur.rel,
-            });
-            if (images.length >= SCAN_LIMIT) break;
-          }
+          continue;
         }
+        if (!IMAGE_EXTS.has(extOf(name))) continue;
+        if (images.length >= SCAN_LIMIT) { truncated = true; break; }
+        const file = await h.getFile();
+        images.push({
+          name,
+          file,
+          handle: h,
+          rel: childRel,
+          dirPath: rootPath + '/' + cur.rel,
+        });
       }
     }
+    // 队列没走空 = 是被上限截断的
+    if (queue.length) truncated = true;
   }
 
-  return { folders, images };
+  return { folders, images, dirCount, truncated };
 }
 
 // ---- Sort helper ----
@@ -1260,7 +1482,15 @@ function createRowElement(row, gen) {
     card.style.left = item.left + 'px';
     const img = document.createElement('img');
     img.alt = entry.name;
-    if (entry.thumbUrl) {
+    if (entry.unsupported) {
+      // 浏览器解不了的格式（HEIC 等）：不要留一张永远转圈的 shimmer，
+      // 直接标出格式名，点开光箱也会给出同样的提示
+      card.classList.add('thumb-ready', 'unsupported');
+      const ph = document.createElement('span');
+      ph.className = 'unsupported-icon';
+      ph.textContent = extOf(entry.name).toUpperCase();
+      card.appendChild(ph);
+    } else if (entry.thumbUrl) {
       img.src = entry.thumbUrl;
       img.classList.add('loaded');
       card.classList.add('thumb-ready');
@@ -1290,7 +1520,6 @@ function createRowElement(row, gen) {
 function renderVisibleRows() {
   if (!$scrollContainer || !layoutRows.length) return;
   const gen = vsGen;
-  const scrollTop = window.scrollY - $scrollContainer.getBoundingClientRect().top - window.scrollY + window.scrollY;
   const containerRect = $scrollContainer.getBoundingClientRect();
   const viewTop = -containerRect.top;
   const viewBottom = viewTop + window.innerHeight;
@@ -1376,6 +1605,8 @@ function teardownVirtualScroll() {
 function enqueueRowThumbnails(row) {
   for (const item of row.items) {
     const entry = currentImages[item.imageIndex];
+    // 浏览器解不了的格式（HEIC 等）不排队：卡片直接显示占位，也不该计入"生成失败"
+    if (entry.unsupported) continue;
     if (!entry.thumbUrl && !entry._thumbQueued) {
       entry._thumbQueued = true;
       thumbQueue.push(item.imageIndex);
@@ -1460,8 +1691,9 @@ async function scanFolderPreview(folderHandle, max = 4) {
   try {
     for await (const [name, handle] of folderHandle) {
       if (handle.kind !== 'file') continue;
-      const ext = name.split('.').pop().toLowerCase();
-      if (IMAGE_EXTS.has(ext)) {
+      const ext = extOf(name);
+      // HEIC 之类解不了的不要选中，否则整张拼图卡片都会失败
+      if (IMAGE_EXTS.has(ext) && !isNoDecodeName(name)) {
         files.push(await handle.getFile());
         if (files.length >= max) break;
       }
@@ -1470,19 +1702,37 @@ async function scanFolderPreview(folderHandle, max = 4) {
   return files;
 }
 
+// 拼图缩略图：RAW 要走内嵌预览（否则 createImageBitmap 直接抛异常，
+// 结果是「只要有 RAW 的文件夹，整张卡片都没有拼图」），SVG 走 <img>，其余照旧
 async function generateFolderThumb(file) {
-  const bitmap = await createImageBitmap(file);
-  let w = bitmap.width, h = bitmap.height;
-  if (w > FOLDER_THUMB_MAX || h > FOLDER_THUMB_MAX) {
-    const scale = Math.min(FOLDER_THUMB_MAX / w, FOLDER_THUMB_MAX / h);
-    w = Math.round(w * scale);
-    h = Math.round(h * scale);
+  let source = file;
+  let svg = null;
+  let bmp = null;
+  if (isRawName(file.name)) {
+    const pv = await readRawPreview(file);
+    if (!pv) throw new Error('无法从 RAW 中取出内嵌预览图');
+    source = pv.blob;
+  } else if (isSvgName(file.name)) {
+    svg = await loadSvgImage(file);   // HTMLImageElement 可以直接 drawImage
+    source = svg.img;
   }
-  const canvas = new OffscreenCanvas(w, h);
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(bitmap, 0, 0, w, h);
-  bitmap.close();
-  return await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.6 });
+  try {
+    bmp = source instanceof HTMLImageElement ? source : await createImageBitmap(source, BITMAP_OPTS);
+    let w = bmp.naturalWidth || bmp.width || 160;
+    let h = bmp.naturalHeight || bmp.height || 160;
+    if (w > FOLDER_THUMB_MAX || h > FOLDER_THUMB_MAX) {
+      const scale = Math.min(FOLDER_THUMB_MAX / w, FOLDER_THUMB_MAX / h);
+      w = Math.max(1, Math.round(w * scale));
+      h = Math.max(1, Math.round(h * scale));
+    }
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bmp, 0, 0, w, h);
+    return await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.6 });
+  } finally {
+    if (bmp && bmp !== source) bmp.close();   // ImageBitmap 必须显式释放
+    if (svg) URL.revokeObjectURL(svg.url);
+  }
 }
 
 async function getFolderThumb(dirPath, file) {
@@ -1535,6 +1785,7 @@ async function renderDirectory() {
   // Cleanup
   revokeCurrentUrls();
   teardownVirtualScroll();
+  lbReleaseExcept(new Set());   // 顺手释放光箱预载的 URL（空集合 = 全部释放）
 
   $gallery.innerHTML = '';
   $loading.classList.add('show');
@@ -1542,7 +1793,7 @@ async function renderDirectory() {
 
   try {
     const dirHandle = await getDirHandle(currentPath);
-    const { folders, images } = await scanDir(dirHandle, recursiveMode);
+    const { folders, images, dirCount, truncated } = await scanDir(dirHandle, recursiveMode);
 
     if (gen !== thumbGeneration) return;
 
@@ -1550,7 +1801,10 @@ async function renderDirectory() {
     const sortedImages = sortItems(images);
 
     currentDirPath = currentPath.join('/');
-    currentFolderCount = sortedFolders.length;
+    // 递归模式下列表里的图来自所有子目录，所以计数器显示真正遍历到的目录数，
+    // 而不是只数顶层那几个（原来的写法会让"N 张图片"和"M 个文件夹"对不上）
+    currentFolderCount = recursiveMode ? dirCount : sortedFolders.length;
+    scanTruncated = truncated;
 
     // Build image entries
     const imgEntries = sortedImages.map(img => ({
@@ -1562,6 +1816,7 @@ async function renderDirectory() {
       width: 0,
       height: 0,
       aspect: 1,
+      unsupported: isNoDecodeName(img.name),   // 浏览器解不了的格式（HEIC 等），单独标注
       _thumbQueued: false,
       _thumbFailed: false,
       _currentImgEl: null,
@@ -1572,7 +1827,9 @@ async function renderDirectory() {
     thumbQueue = [];
     thumbQueueIdx = 0;
     thumbWorkersRunning = 0;
-    thumbDoneCount = 0;
+    // 「解不了」的格式不会进缩略图队列，先计入已完成，
+    // 否则 done 永远追不上 total，进度会一直停在"正在生成缩略图"
+    thumbDoneCount = imgEntries.length ? imgEntries.filter(e => e.unsupported).length : 0;
     thumbFailedCount = 0;
     thumbFailedNames = [];
     $counter.title = '';
@@ -1607,7 +1864,9 @@ async function renderDirectory() {
       const sec = document.createElement('div');
       sec.className = 'dir-section';
       const h = document.createElement('h3');
-      h.textContent = `图片 (${imgEntries.length})`;
+      h.textContent = truncated
+        ? `图片 (${imgEntries.length}，已达 ${SCAN_LIMIT} 张上限)`
+        : `图片 (${imgEntries.length})`;
       sec.appendChild(h);
 
       $scrollContainer = document.createElement('div');
@@ -1624,7 +1883,7 @@ async function renderDirectory() {
     }
 
     // Counter & breadcrumbs
-    updateCounterLabel(imgEntries.length, sortedFolders.length);
+    updateCounterLabel(imgEntries.length, currentFolderCount);
     renderBreadcrumbs();
 
     $loading.classList.remove('show');
@@ -1663,7 +1922,7 @@ async function renderDirectory() {
 // ---- Aspect ratio OPFS cache ----
 async function loadAspectRatios(dirPath, entries, gen) {
   if (!cacheDir) return;
-  const arKey = 'ar_' + dirPath.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 180);
+  const arKey = arCacheKey(dirPath);
   let ratios = {};
   try {
     const fh = await cacheDir.getFileHandle(arKey);
@@ -1688,8 +1947,9 @@ async function loadAspectRatios(dirPath, entries, gen) {
 const PREMEASURE_CONCURRENCY = 24;
 
 async function premeasureAspects(entries, gen) {
-  // 注意：条目初始化时 aspect 就是 1（正方形），只有 width=0 才代表"还没测过"
-  const todo = entries.filter(e => !(e.width > 0));
+  // 注意：条目初始化时 aspect 就是 1（正方形），只有 width=0 才代表"还没测过"。
+  // unsupported（HEIC 等）直接跳过，省掉 256KB 的无效读取。
+  const todo = entries.filter(e => !(e.width > 0) && !e.unsupported);
   if (!todo.length) return;
 
   let cursor = 0;
@@ -1732,7 +1992,7 @@ async function premeasureAspects(entries, gen) {
 
 async function saveAspectRatios(dirPath, entries) {
   if (!cacheDir) return;
-  const arKey = 'ar_' + dirPath.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 180);
+  const arKey = arCacheKey(dirPath);
   const ratios = {};
   for (const entry of entries) {
     if (entry.width > 0) {
@@ -1932,33 +2192,51 @@ async function updateExifPanel() {
 $infoBtn.addEventListener('click', toggleExifPanel);
 
 // ---- Lightbox preload ----
+// lbPreloadCache 是「全尺寸图片 URL」的唯一持有者：谁创建谁负责 revoke。
+// lbCurrentUrl 只是 lbPreloadCache.get(lbIndex) 的别名，不单独回收 ——
+// 原实现用「新索引是否在缓存里」去判断旧 URL 的归属，是错配的。
 const lbPreloadCache = new Map(); // index -> blobURL
 
-function lbPreloadAdjacent() {
-  if (currentImages.length <= 1) return;
-  const needed = new Set([lbIndex]);
-  const prev = (lbIndex - 1 + currentImages.length) % currentImages.length;
-  const next = (lbIndex + 1) % currentImages.length;
-  needed.add(prev);
-  needed.add(next);
-  // Revoke entries not in needed set (but not lbCurrentUrl)
+// 保留集合之外的 URL 一律释放
+function lbReleaseExcept(keep) {
   for (const [idx, url] of lbPreloadCache) {
-    if (!needed.has(idx) && url !== lbCurrentUrl) {
+    if (!keep.has(idx)) {
       URL.revokeObjectURL(url);
       lbPreloadCache.delete(idx);
     }
   }
-  // Preload prev/next
-  for (const idx of [prev, next]) {
-    if (!lbPreloadCache.has(idx)) {
-      const entry = currentImages[idx];
-      if (entry) {
-        const url = URL.createObjectURL(fullBlobFor(entry));
-        lbPreloadCache.set(idx, url);
-        const img = new Image();
-        img.src = url; // trigger browser decode
-      }
+}
+
+// 取某张图的可显示 URL（没有就按需创建：RAW 会在这里才去读内嵌预览）
+async function lbEnsureUrl(idx) {
+  if (lbPreloadCache.has(idx)) return lbPreloadCache.get(idx);
+  const entry = currentImages[idx];
+  if (!entry) return null;
+  const blob = await fullBlobFor(entry);
+  if (!blob) return null;                 // 解不了，交由调用方提示
+  const url = URL.createObjectURL(blob);
+  lbPreloadCache.set(idx, url);
+  return url;
+}
+
+// 预热前后各一张，并释放其它
+async function lbPreloadAdjacent() {
+  const n = currentImages.length;
+  if (n <= 1) return;
+  const keep = new Set([lbIndex, (lbIndex - 1 + n) % n, (lbIndex + 1) % n]);
+  lbReleaseExcept(keep);
+  for (const idx of keep) {
+    if (idx === lbIndex || lbPreloadCache.has(idx)) continue;
+    const url = await lbEnsureUrl(idx);
+    if (!url) continue;
+    // 等待期间用户可能已经翻页：这张图不再需要就立刻回收，避免泄漏
+    if (idx !== (lbIndex - 1 + n) % n && idx !== (lbIndex + 1) % n) {
+      URL.revokeObjectURL(url);
+      lbPreloadCache.delete(idx);
+      return;
     }
+    const img = new Image();   // 只是让浏览器提前解码
+    img.src = url;
   }
 }
 
@@ -2160,9 +2438,22 @@ function openLightbox(index) {
   $lightbox.classList.add('open');
 }
 
-function showLightboxImage() {
+// 光箱里的失败提示（HEIC 解不了、RAW 没有内嵌预览等）
+function lbShowMessage(text) {
+  $lbMsg.textContent = text;
+  $lbMsg.classList.add('show');
+}
+
+function lbHideMessage() {
+  $lbMsg.classList.remove('show');
+}
+
+let lbShowToken = 0;   // 每次切换图片自增；异步加载回来时用它判断结果是否已过期
+
+async function showLightboxImage() {
   const entry = currentImages[lbIndex];
   if (!entry) return;
+  const token = ++lbShowToken;
 
   // Crossfade: snapshot current image into prev layer
   const isOpen = $lightbox.classList.contains('open');
@@ -2175,27 +2466,39 @@ function showLightboxImage() {
   }
 
   lbResetZoom();
-  // Revoke previous full-size URL (unless it's in preload cache)
-  if (lbCurrentUrl && !lbPreloadCache.has(lbIndex)) {
-    URL.revokeObjectURL(lbCurrentUrl);
+  lbHideMessage();
+  $lbInfo.textContent = `${entry.name}  (${lbIndex + 1} / ${currentImages.length})`;
+
+  // 按需拿 URL：RAW 会在这里才去读内嵌预览 —— 所以缩略图/尺寸命中缓存也不影响打开
+  const url = await lbEnsureUrl(lbIndex);
+  if (token !== lbShowToken) return;   // 用户已翻到别的图，丢弃这次结果
+
+  if (!url) {
+    // 解不了（HEIC，或 RAW 里没有内嵌预览）：明确提示，不要留一片空白
+    lbCurrentUrl = null;
+    $lbImg.removeAttribute('src');
+    $lbImgPrev.style.opacity = '0';    // 淡出上一张快照，露出提示文字
+    lbShowMessage(isNoDecodeName(entry.file.name)
+      ? `${extOf(entry.file.name).toUpperCase()} 格式浏览器无法解码，请用系统看图工具打开`
+      : '无法显示这张图片：RAW 中没有找到内嵌预览');
+    lbPreloadAdjacent();
+    if (exifPanelOpen) updateExifPanel();
+    return;
   }
-  lbCurrentUrl = null;
-  // Use preloaded URL if available, otherwise create new
-  if (lbPreloadCache.has(lbIndex)) {
-    lbCurrentUrl = lbPreloadCache.get(lbIndex);
-  } else {
-    lbCurrentUrl = URL.createObjectURL(fullBlobFor(entry));
-  }
-  lbPreloadCache.set(lbIndex, lbCurrentUrl);
+
+  lbCurrentUrl = url;
   $lbImg.onload = () => {
+    if (token !== lbShowToken) return;
     lbLayoutW = $lbImg.offsetWidth;
     lbLayoutH = $lbImg.offsetHeight;
     $lbImg.className = 'zoom-in-cursor';
     // Fade out the previous image layer
     $lbImgPrev.style.opacity = '0';
   };
+  $lbImg.onerror = () => {
+    if (token === lbShowToken) lbShowMessage('图片解码失败');
+  };
   $lbImg.src = lbCurrentUrl;
-  $lbInfo.textContent = `${entry.name}  (${lbIndex + 1} / ${currentImages.length})`;
   lbPreloadAdjacent();
   if (exifPanelOpen) updateExifPanel();
 }
@@ -2203,12 +2506,14 @@ function showLightboxImage() {
 function closeLightbox() {
   $lightbox.classList.remove('open');
   lbResetZoom();
+  lbHideMessage();
   // Clear crossfade layer
   $lbImgPrev.src = '';
   $lbImgPrev.style.opacity = '0';
+  // 清掉当前图的 src：URL 马上会被 revoke，留着会让下次打开用到已失效的地址
+  $lbImg.removeAttribute('src');
   // Revoke all preloaded URLs
-  for (const [, url] of lbPreloadCache) URL.revokeObjectURL(url);
-  lbPreloadCache.clear();
+  lbReleaseExcept(new Set());   // 空集合 = 全部释放
   lbCurrentUrl = null;
   // Close EXIF panel
   exifPanelOpen = false;
