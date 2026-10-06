@@ -1,0 +1,3 @@
+# 所有文件都按原样存取。本机 git 全局开了 core.autocrlf=true，
+# 不锁死的话 checkout 会把 LF 改写成 CRLF，凭空产生大量无意义 diff。
+* -text

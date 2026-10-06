@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>gkpv 缩略图诊断</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI","Microsoft YaHei",sans-serif; margin:0; padding:28px;
+         background:#fff; color:#1a1a1a; line-height:1.6; }
+  h1 { font-size:17px; font-weight:600; margin:0 0 4px; }
+  p.sub { color:#666; font-size:13px; margin:0 0 20px; }
+  button { font-size:14px; padding:9px 18px; border:1px solid #e3e3e3; background:#fff;
+           border-radius:6px; cursor:pointer; margin-right:8px; }
+  button:hover { border-color:#999; }
+  button.primary { background:#2b6cb0; color:#fff; border-color:#2b6cb0; }
+  #out { margin-top:20px; font-family: Consolas,"Cascadia Mono",monospace; font-size:12.5px;
+         white-space:pre-wrap; background:#fafafa; border:1px solid #e3e3e3;
+         border-radius:8px; padding:14px; min-height:120px; max-height:70vh; overflow:auto; }
+  .hint { font-size:12.5px; color:#666; margin-top:12px; }
+</style>
+</head>
+<body>
+<h1>gkpv 缩略图诊断</h1>
+<p class="sub">定位「看不到图 / 一直卡在正在生成缩略图」的原因。测的是你当前浏览器的真实耗时。</p>
+
+<button class="primary" id="btnDir">选择有问题的文件夹</button>
+<button id="btnFiles">或选择几张图片</button>
+<button id="btnCopy">复制结果</button>
+
+<div id="out">点上面的按钮开始。</div>
+
+<p class="hint">
+会<b>递归</b>扫描子目录，挑体积最大的若干张来测。普通图片直接测解码；
+<b>相机 RAW</b> 会先按 gkpv 的方式提取内嵌 JPEG 预览，再测解码。
+</p>
+
+<script>
+const $out = document.getElementById('out');
+let lastReport = '';
+function log(s) { $out.textContent += s + '\n'; lastReport = $out.textContent; }
+function clear() { $out.textContent = ''; }
+
+const RAW_EXTS = ['cr2','cr3','crw','nef','nrw','arw','srf','sr2','dng','raf','orf','rw2',
+                  'pef','srw','erf','kdc','dcr','mos','mrw','mef','3fr','iiq','rwl','r3d','x3f','raw'];
+const COMMON = ['jpg','jpeg','png','webp','avif','gif','bmp','tif','tiff','heic'];
+const IMG_RE = new RegExp('\\.(' + COMMON.concat(RAW_EXTS).join('|') + ')$', 'i');
+const RAW_SET = new Set(RAW_EXTS);
+const MAX_IMAGES = 400;
+const MAX_DEPTH = 6;
+const RAW_HEAD = 262144;
+
+function isRaw(name) {
+  const i = String(name).lastIndexOf('.');
+  return i >= 0 && RAW_SET.has(String(name).slice(i + 1).toLowerCase());
+}
+
+/* ---- 与 gkpv 里 readRawPreview 相同的逻辑：从 TIFF 容器抠出内嵌 JPEG ---- */
+const rawCache = new WeakMap();
+async function readRawPreview(file) {
+  const hit = rawCache.get(file);
+  if (hit) return hit;
+  try {
+    const buf = new Uint8Array(await file.slice(0, RAW_HEAD).arrayBuffer());
+    const dv = new DataView(buf.buffer);
+    const n = buf.length;
+    if (n < 16) return null;
+    let le = null;
+    if (buf[0] === 0x49 && buf[1] === 0x49 && buf[2] === 0x2a && buf[3] === 0x00) le = true;
+    else if (buf[0] === 0x4d && buf[1] === 0x4d && buf[2] === 0x00 && buf[3] === 0x2a) le = false;
+    else return null;
+
+    const scan = (off) => {
+      const out = {};
+      if (off + 2 > n) return out;
+      const cnt = dv.getUint16(off, le);
+      for (let i = 0; i < cnt; i++) {
+        const p = off + 2 + i * 12;
+        if (p + 12 > n) break;
+        const tag = dv.getUint16(p, le);
+        const typ = dv.getUint16(p + 2, le);
+        const c = dv.getUint32(p + 4, le);
+        out[tag] = { typ, cnt: c, v: typ === 3 ? dv.getUint16(p + 8, le) : dv.getUint32(p + 8, le) };
+      }
+      return out;
+    };
+
+    const t0 = scan(dv.getUint32(4, le));
+    const subOffs = () => {
+      const s = t0[0x014A];
+      if (!s) return [];
+      if (s.cnt > 1) {
+        const base = s.v, out = [];
+        for (let i = 0; i < s.cnt; i++) {
+          if (base + 4 * s.cnt > n) break;
+          out.push(dv.getUint32(base + 4 * i, le));
+        }
+        return out;
+      }
+      return [s.v];
+    };
+    const subs = subOffs().map(scan);
+
+    const cands = [];
+    for (const e of [t0].concat(subs)) {
+      const o = e[0x0201], l = e[0x0202];
+      if (o && l && o.v > 0 && l.v > 0) cands.push([o.v, l.v]);
+    }
+    let w = 0, h = 0;
+    if (t0[0x8769]) {
+      const ex = scan(t0[0x8769].v);
+      if (ex[0xA002] && ex[0xA003] && ex[0xA002].v > 0 && ex[0xA003].v > 0) { w = ex[0xA002].v; h = ex[0xA003].v; }
+    }
+    if (!(w > 0 && h > 0)) {
+      for (const e of subs) {
+        const iw = e[0x0100], ih = e[0x0101];
+        if (iw && ih && iw.v > w && ih.v > 0) { w = iw.v; h = ih.v; }
+      }
+    }
+    if (!(w > 0 && h > 0) && t0[0x0100] && t0[0x0101]) { w = t0[0x0100].v; h = t0[0x0101].v; }
+
+    cands.sort((a, b) => a[1] - b[1]);
+    let chosen = null;
+    for (const c of cands) { if (c[1] > 8192 && c[1] <= 16 * 1024 * 1024) { chosen = c; break; } }
+    if (!chosen) return null;
+
+    const bytes = new Uint8Array(await file.slice(chosen[0], chosen[0] + chosen[1]).arrayBuffer());
+    if (bytes.length < 4 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) return null;
+    const res = { blob: new Blob([bytes], { type: 'image/jpeg' }), w, h };
+    rawCache.set(file, res);
+    return res;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function scanDir(handle) {
+  const images = [], dirs = [], others = [];
+  let scanned = 0, stopped = false;
+  async function walk(h, rel, depth) {
+    if (stopped || depth > MAX_DEPTH) return;
+    for await (const [name, ch] of h) {
+      if (stopped) return;
+      if (name.startsWith('.')) continue;
+      if (ch.kind === 'directory') {
+        dirs.push(rel + name + '/');
+        await walk(ch, rel + name + '/', depth + 1);
+      } else {
+        scanned++;
+        if (IMG_RE.test(name)) {
+          if (images.length < MAX_IMAGES) images.push({ name: rel + name, file: await ch.getFile() });
+          else { stopped = true; return; }
+        } else if (others.length < 25) others.push(rel + name);
+      }
+    }
+  }
+  await walk(handle, '', 0);
+  return { images, dirs, others, scanned };
+}
+
+async function pickImages() {
+  if (window.__pickMode === 'files') {
+    return { images: window.__pickedFiles, dirs: [], others: [], scanned: window.__pickedFiles.length };
+  }
+  const dir = await window.showDirectoryPicker({ mode: 'read' });
+  const r = await scanDir(dir);
+  r.rootName = dir.name;
+  return r;
+}
+
+async function run() {
+  clear();
+  let r;
+  try { r = await pickImages(); }
+  catch (e) { log('选择失败: ' + (e && e.name === 'AbortError' ? '你取消了选择' : e.message)); return; }
+
+  log('扫描结果：');
+  log('  根目录     : ' + (r.rootName || '(所选文件)'));
+  log('  子目录     : ' + r.dirs.length + ' 个' + (r.dirs.length ? '  例: ' + r.dirs.slice(0, 5).join(', ') : ''));
+  log('  扫到文件   : ' + r.scanned + ' 个');
+  log('  其中图片   : ' + r.images.length + ' 张');
+  const rawCount = r.images.filter(x => isRaw(x.name)).length;
+  if (rawCount) log('  （含相机 RAW: ' + rawCount + ' 张）');
+
+  if (!r.images.length) {
+    log('\n!! 没找到图片。该目录（含子目录）里的文件是：');
+    if (r.others.length) { for (const o of r.others) log('     ' + o); }
+    else log('     （一个文件都没有）');
+    log('\n请确认选的是装照片的那个文件夹。');
+    return;
+  }
+
+  const test = r.images.slice().sort((a, b) => b.file.size - a.file.size).slice(0, 6);
+  log('\n取体积最大的 ' + test.length + ' 张测试\n');
+
+  let fail = 0, totalMs = 0;
+
+  for (const { name, file } of test) {
+    const raw = isRaw(name);
+    log('── ' + name + '  (' + (file.size / 1048576).toFixed(1) + ' MB)' + (raw ? '  [RAW]' : ''));
+
+    let target = file, note = '';
+    if (raw) {
+      const t0 = performance.now();
+      const pv = await readRawPreview(file);
+      const tex = Math.round(performance.now() - t0);
+      if (!pv) {
+        log('   ** 取不到内嵌 JPEG 预览 —— gkpv 会跳过这张 **');
+        fail++;
+        continue;
+      }
+      target = pv.blob;
+      note = '  提取预览 ' + tex + ' ms -> ' + (pv.blob.size / 1024).toFixed(0) + ' KB, 真实尺寸 ' + pv.w + 'x' + pv.h;
+      log(note);
+    }
+
+    const variants = [
+      { label: '全解码（无 resize）', opts: undefined },
+      { label: 'resize 640 high  ', opts: { resizeWidth: 640, resizeQuality: 'high' } },
+      { label: 'resize 640 medium', opts: { resizeWidth: 640, resizeQuality: 'medium' } },
+      { label: 'resize 640 low   ', opts: { resizeWidth: 640, resizeQuality: 'low' } },
+    ];
+    let base = 0;
+    for (const v of variants) {
+      await new Promise(res => setTimeout(res, 40));
+      const t0 = performance.now();
+      let ok = true, err = '', dim = '';
+      try {
+        const bmp = v.opts ? await createImageBitmap(target, v.opts) : await createImageBitmap(target);
+        dim = bmp.width + 'x' + bmp.height;
+        bmp.close();
+      } catch (e) { ok = false; err = e.name + ': ' + e.message; }
+      const ms = Math.round(performance.now() - t0);
+      if (v.opts === undefined) base = ms;
+      if (!ok) fail++;
+      totalMs += ms;
+      log('   ' + v.label + '  ' + String(ms).padStart(6) + ' ms  ' + dim.padEnd(11) +
+          ' ' + ((v.opts && base > 0) ? (base / Math.max(1, ms)).toFixed(1) + 'x' : '基准').padStart(7) +
+          (ok ? '' : '  失败:' + err));
+    }
+    log('');
+  }
+
+  log('═══ 汇总 ═══');
+  log('  失败次数: ' + fail);
+  log('  解码总耗时: ' + totalMs + ' ms');
+  log('');
+  if (fail) {
+    log('  有取不到预览 / 解码失败的图 —— 这些会让 gkpv 的缩略图生成中断。');
+    log('  （已修复的旧 bug：失败不计数会导致计数器永久停在「正在生成缩略图」）');
+  } else {
+    log('  全部成功。若 gkpv 仍卡住，请把上面的结果发给我。');
+  }
+}
+
+document.getElementById('btnDir').onclick = () => { window.__pickMode = 'dir'; run(); };
+document.getElementById('btnFiles').onclick = () => {
+  const i = document.createElement('input');
+  i.type = 'file'; i.multiple = true; i.accept = 'image/*';
+  i.onchange = () => {
+    window.__pickedFiles = Array.from(i.files).map(f => ({ name: f.name, file: f }));
+    window.__pickMode = 'files';
+    run();
+  };
+  i.click();
+};
+document.getElementById('btnCopy').onclick = async () => {
+  try { await navigator.clipboard.writeText(lastReport); log('\n(已复制到剪贴板)'); }
+  catch (e) { log('\n(复制失败，请手动选中)'); }
+};
+</script>
+</body>
+</html>
