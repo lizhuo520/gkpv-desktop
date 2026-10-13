@@ -229,6 +229,10 @@ tests/
 # 0) 依赖（国内网络加镜像，见 README）
 npm.cmd install
 
+# 0.5) 关键前置：删掉这个环境变量，否则 electron.exe 退化成纯 Node、应用永远起不来
+#      （现象：exe 秒退、无任何输出。打包产物同样受影响 —— 实测踩到过）
+Remove-Item Env:\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+
 # 1) 素材（可重复生成，产出与 manifest 一致）
 npm.cmd run fixtures
 
@@ -241,7 +245,38 @@ npm.cmd run test:e2e
 # 4) 打包 + 产物冒烟
 npm.cmd run pack
 npm.cmd run smoke:pack
+npm.cmd run smoke:pack "dist\GKP Viewer-2.0.0-portable.exe"   # 可选：指定产物
 
 # 5) 全量
 npm.cmd test
 ```
+
+### 安装包与便携版怎么验（自动化覆盖不到「双击」）
+
+`setup.exe` 与 `portable.exe` 都可以脚本化跑一遍，用来替代「双击」这一类人工项：
+
+```powershell
+# 安装到临时目录（/S 静默，/D 指定目录且必须是最后一个参数、不带引号）
+$target = Join-Path $env:TEMP "gkpv-install-test"
+Start-Process "dist\GKP Viewer-2.0.0-setup.exe" -ArgumentList "/S", "/D=$target" -Wait
+
+# 启动装好的应用 → 再启动一次验单实例锁 → 关窗验无残留
+Start-Process (Join-Path $target "GKP Viewer.exe")
+
+# 静默卸载：安装目录与两个快捷方式都应被清干净
+Start-Process (Get-ChildItem $target -Filter "Uninstall*.exe").FullName -ArgumentList "/S" -Wait
+```
+
+实测结论（2026-10-14，Windows 10 19045）：安装 7s / 75 文件 368 MB，桌面与开始菜单快捷方式都创建成功；
+安装版 2s 开窗、便携版 4s 开窗；窗口已开着时二次启动**不新开窗口**（单实例锁生效）；
+关窗后残留进程 0 个；卸载后安装目录与两个快捷方式**全部清除**，`%APPDATA%\GKP Viewer`
+按设计保留（`deleteAppDataOnUninstall: false`，缩略图缓存与偏好重装后还在）。
+
+> 便携版是自解压壳，会用**新进程**跑内层 exe，Playwright 无法接管（需要一开始就掌握进程），
+> 所以 `smoke-packaged.mjs` 默认只测 `win-unpacked` 里的 exe。便携版改用
+> 「记录启动前的进程 id → 枚举新出现的进程 → 看 `MainWindowHandle` 是否为 0」验证。
+
+> 崩溃日志的预期行为：正常关窗**不会**产生 `gkpv-crash.log`。只有进程被强杀
+> （任务管理器结束进程 / `Stop-Process -Force`）时，主进程会先观察到子进程消失并写入一条记录，
+> 于是留下一个 0 字节文件 —— 这是**正常**的，不是崩溃证据；有内容才代表出过问题。
+

@@ -13,12 +13,12 @@
 
 | # | 怎么点 | 通过标准 | 实测 |
 | --- | --- | --- | --- |
-| 1.1 | 双击 `GKP Viewer-2.0.0-portable.exe` | 开出**独立应用窗口**（不是浏览器标签页），标题为「GKP 照片查看器」，无地址栏、无书签栏 | ⬜ |
-| 1.2 | 跑安装版：双击 setup → 选目录 → 安装 | 桌面与开始菜单出现「GKP 照片查看器」快捷方式；双击能启动 | ⬜ |
-| 1.3 | 二次启动（窗口已开着时再双击图标） | **不新开进程**，聚焦已有窗口（单实例锁生效） | ⬜ |
+| 1.1 | 双击 `GKP Viewer-2.0.0-portable.exe` | 开出**独立应用窗口**（不是浏览器标签页），标题为「GKP 照片查看器」，无地址栏、无书签栏 | ✅ 已实测（4s 开窗，标题正确；脚本化验证见第十节） |
+| 1.2 | 跑安装版：双击 setup → 选目录 → 安装 | 桌面与开始菜单出现「GKP 照片查看器」快捷方式；双击能启动 | ✅ 已实测（静默安装 7s / 75 文件；两个快捷方式都创建成功；装好的 exe 2s 开窗。图形化向导的分步界面本身仍是人工项） |
+| 1.3 | 二次启动（窗口已开着时再双击图标） | **不新开进程**，聚焦已有窗口（单实例锁生效） | ✅ 已实测（带窗口的进程数仍为 1，第二次启动的进程自行退出） |
 | 1.4 | 看窗口图标（任务栏 + 标题栏） | 显示 gkpv 图标，不是 Electron 默认图标 | ⬜ |
-| 1.5 | Windows 首次运行提示 | 出现「未知发布者 / SmartScreen」提示是**预期**的：本轮不做代码签名。点「更多信息 → 仍要运行」 | ⬜ |
-| 1.6 | 关窗口 | 进程完全退出（任务管理器里无残留 `GKP Viewer.exe`） | ⬜ |
+| 1.5 | Windows 首次运行提示 | 出现「未知发布者 / SmartScreen」提示是**预期**的：本轮不做代码签名。点「更多信息 → 仍要运行」 | ⬜ 人工（本机因安装包来源为本地文件未触发提示） |
+| 1.6 | 关窗口 | 进程完全退出（任务管理器里无残留 `GKP Viewer.exe`） | ✅ 已实测（残留进程 0 个） |
 
 ## 二、打开文件夹（核心功能）
 
@@ -96,9 +96,9 @@
 
 | # | 怎么点 | 通过标准 | 实测 |
 | --- | --- | --- | --- |
-| 8.1 | 设置 → 应用 → 卸载「GKP 照片查看器」 | 卸载成功，快捷方式消失 | ⬜ |
-| 8.2 | 检查安装目录 | 无残留文件 | ⬜ |
-| 8.3 | 检查 `%APPDATA%` | 用户数据按设计保留（`deleteAppDataOnUninstall: false`），**这是有意为之**，不算残留 | ⬜ |
+| 8.1 | 设置 → 应用 → 卸载「GKP 照片查看器」 | 卸载成功，快捷方式消失 | ✅ 已实测（`Uninstall GKP Viewer.exe /S` 退出码 0；桌面与开始菜单快捷方式都消失） |
+| 8.2 | 检查安装目录 | 无残留文件 | ✅ 已实测（安装目录整个消失） |
+| 8.3 | 检查 `%APPDATA%` | 用户数据按设计保留（`deleteAppDataOnUninstall: false`），**这是有意为之**，不算残留 | ✅ 已实测（`%APPDATA%\GKP Viewer` 保留。<br>注意：若进程曾被强杀，这里会有一个 **0 字节**的 `gkpv-crash.log` —— 正常关窗不会产生；有内容才是真崩溃） |
 
 ---
 
@@ -125,11 +125,42 @@
 
 | 项 | 命令 | 结果 |
 | --- | --- | --- |
-| 单元测试 | `npm.cmd run test:unit` | **26 / 26 通过**（`node --test`，约 0.2s；`real/` 不在磁盘时，涉及它的断言跳过并打印原因） |
+| 单元测试 | `npm.cmd run test:unit` | **26 / 26 通过**（`node --test`，约 0.2s；`real/` 不在磁盘时也是 26/26 —— 单测按 manifest 实际登记数校验，不依赖个人相册） |
 | 端到端测试 | `npm.cmd run test:e2e` | **43 / 43 通过**（真 Electron 44 窗口，约 75s；缺 `real/` 素材的环境记 42 通过 + 1 跳过、0 失败；复现步骤见 `docs/test-plan.md` 第九节） |
 | 打包冒烟 | `npm.cmd run smoke:pack` | **8 / 8 通过**（跑 `dist/win-unpacked/GKP Viewer.exe`：开窗、`app://` 源、解码出 400×300 缩略图、关窗无残留进程） |
 | 测试素材校验 | 单测前 3 条 | 72 个素材 sha256 全一致（`real/` 不入库时按 66 个计） |
 | GIF 跨编码器校验 | `npm.cmd run gif-reference:check` | 冻结的 Pillow 参照物 273 B / `6a96068a…` 就位 |
+| 持续集成 | [Actions run #2](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38427067137) | **success**：装依赖 → 生成素材（`--no-real`）→ 单元 26/26 → 端到端 42 通过 + 1 跳过、0 失败 → 打包（解包目录）→ 产物冒烟 8/8 |
+| 安装/卸载流程 | `setup.exe /S /D=<临时目录>` → 启动 → 再启动 → `Uninstall GKP Viewer.exe /S` | **通过**（见下表） |
+| 发布产物 | [Release v2.0.0](https://github.com/lizhuo520/gkpv-desktop/releases/tag/v2.0.0) | 两个资产已上传：`GKP.Viewer-2.0.0-setup.exe` 106.3 MB、`GKP.Viewer-2.0.0-portable.exe` 106.1 MB；tag `v2.0.0` → `539d759` |
+
+### 安装包与便携版的实测记录（对应第一节 1.1~1.3、1.6 与第八节）
+
+自动化跑不了「双击」，但安装器与产物本身是可以脚本化的，实测结果如下：
+
+| 步骤 | 命令 | 实测 |
+| --- | --- | --- |
+| 静默安装 | `GKP Viewer-2.0.0-setup.exe /S /D=C:\…\Temp\gkpv-install-test` | 退出码 0，7s；落地 75 个文件 / 368 MB，含 `GKP Viewer.exe` 与 `Uninstall GKP Viewer.exe` |
+| 快捷方式 | — | 桌面「GKP 照片查看器.lnk」与开始菜单项**都创建成功** |
+| 启动安装版 | 直接跑装好的 `GKP Viewer.exe` | ✔ 2s 开出窗口，标题「GKP 照片查看器」 |
+| 单实例锁（1.3） | 窗口已开着时再启动一次 | ✔ 带窗口的进程数仍为 **1**，第二次启动的进程立刻退出（聚焦已有窗口） |
+| 关窗退出（1.6） | 关掉窗口 | ✔ 残留 `GKP Viewer.exe` 进程 **0 个** |
+| 静默卸载（8.1/8.2） | `Uninstall GKP Viewer.exe /S` | 退出码 0；安装目录**已消失**，桌面与开始菜单快捷方式**都已清除** |
+| 便携版（1.1） | 直接跑 `GKP Viewer-2.0.0-portable.exe` | ✔ 4s 开出窗口，标题「GKP 照片查看器」；关掉后无残留进程 |
+
+> 便携版是自解压壳，会用**新的进程**去跑内层 exe，所以 `tests/pack/smoke-packaged.mjs` 没法直接接管它
+> （Playwright 需要一开始就掌握进程）。上面改用「枚举新出现的进程 + 看 `MainWindowHandle`」来验证。
+
+> 排查记录：第一次跑便携版时窗口从没出现过。根因不是产物有问题，而是**当前 shell 里带着
+> `ELECTRON_RUN_AS_NODE=1`** —— 该变量会让任何 Electron 打包的 exe 退化成纯 Node 进程，
+> 立刻退出且**没有任何输出**。`Remove-Item Env:\ELECTRON_RUN_AS_NODE` 之后两个产物都正常开窗。
+> 这个坑已写进 `docs/test-plan.md`（跑 E2E 前的必备步骤），脚本内部也各自 `delete env.ELECTRON_RUN_AS_NODE` 自保。
+
+**发布产物的本机 SHA256**（`F:\gkpv\dist\`，重打包后）：
+`GKP Viewer-2.0.0-setup.exe` = `AE0F6F5EDEB79B8196CD8607EDC6A85FC1974B0AB820DFAE3C5D5AFEA552E643`；
+`GKP Viewer-2.0.0-portable.exe` = `56C76F115899A9F2DE0A700AACF9D455FBCE7E4AD8E3D592963234D0986E779A`。
+（GitHub 上传资产时会把文件名里的空格替换成 `.`，所以远端名是 `GKP.Viewer-…`。）
 
 **已知未覆盖**（不谎报）：真实机型未压缩 RAW 样片、HEIC 真实解码（Chromium 不支持）、
-原生文件夹对话框（人工项 2.1）、macOS/Linux、超大图库（> 20000 张，代码有截断提示但未实测）。
+原生文件夹对话框（人工项 2.1）、macOS/Linux、超大图库（> 20000 张，代码有截断提示但未实测）、
+CI 上 `thumbs:real-photos-decode` 一条跳过（个人相册素材不入库）。

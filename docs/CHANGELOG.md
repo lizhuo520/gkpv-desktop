@@ -71,6 +71,16 @@ EXIF 解析、RAW 处理、虚滚动、灯箱、排序筛选全部沿用原实�
 - **不做代码签名**：首次运行会出现「未知发布者」提示，这是预期行为。
 - **本轮不含**：文件关联双击打开、右键「用 gkpv 打开文件夹」、记住上次打开的文件夹。
 
+### 发布与验证（2.0.0）
+
+- 仓库：[`lizhuo520/gkpv-desktop`](https://github.com/lizhuo520/gkpv-desktop)；发布页：
+  [`v2.0.0` Release](https://github.com/lizhuo520/gkpv-desktop/releases/tag/v2.0.0)（附 setup 与 portable 两个安装包）。
+- 阶段标签：`v2.0.0-alpha.1`（骨架）→ `v2.0.0-alpha.2`（渲染层可跑）→ `v2.0.0-beta.1`（测试全绿）→ `v2.0.0`。
+- 持续集成：[Actions run #2](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38427067137) 在
+  windows-latest 上全绿（装依赖 → 生成素材 → 单元 26/26 → 端到端 42 通过 + 1 跳过 → 打包 → 产物冒烟 8/8）。
+- 安装/卸载流程已脚本化实测：静默安装 7s、快捷方式创建成功、安装版 2s 开窗、便携版 4s 开窗、
+  二次启动不新开窗口、关窗无残留进程、静默卸载后目录与快捷方式清除干净。明细见 `docs/acceptance.md` 第十节。
+
 ---
 
 ## 网页版历史（1.x，移植前的开发过程）
