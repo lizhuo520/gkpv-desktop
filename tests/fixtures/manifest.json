@@ -1,0 +1,825 @@
+{
+  "generatedAt": "2026-10-13T06:22:24.113Z",
+  "realSrc": "D:\\图片\\iCloud 照片",
+  "files": [
+    {
+      "rel": "basic/png-320x240.png",
+      "size": 144532,
+      "sha256": "6e8156c5382a3fda312a2e43b5b4742b8c716702913aa0053099e0392419b258",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 320,
+        "h": 240
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "basic/png-64x512.png",
+      "size": 38373,
+      "sha256": "ffb05851c697b4929ebbd203c0b2192f6e35235e409674ca2aec1846ae1cb945",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 64,
+        "h": 512
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "basic/png-transparent.png",
+      "size": 673,
+      "sha256": "1937a6e64461d97042171f91af2fe0f71245e98fbf540d09684c85c23c04e1d9",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 200,
+        "h": 200
+      },
+      "kind": "image",
+      "note": "右半透明"
+    },
+    {
+      "rel": "basic/bmp-150x100.bmp",
+      "size": 45254,
+      "sha256": "ec3291621766ed16c0e2a6b4c2129a9245f51de7b87c05e7756fc109abd03b62",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 150,
+        "h": 100
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "basic/gif-120x90.gif",
+      "size": 273,
+      "sha256": "6a96068a0520170d8d56354d888e0c27a34b6fa5e58469ad133277d26902d6af",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 120,
+        "h": 90
+      },
+      "kind": "image",
+      "note": "Pillow 12.3 冻结参照物（273B、隔行 packed=0x40）；与 tests/samples/gif-120x90.gif 手写 LZW 逐点比对"
+    },
+    {
+      "rel": "basic/webp-64x64.webp",
+      "size": 782,
+      "sha256": "00d2df53596e313a1693b889624967dde8253e8acbbc045cabda38bfe1273dac",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 64,
+        "h": 64
+      },
+      "kind": "image",
+      "note": "Chromium 编码的真实 WebP"
+    },
+    {
+      "rel": "basic/webp-128x64.webp",
+      "size": 920,
+      "sha256": "c77b7ae6c4df11a8a2825eb68e4f71e74083b00b40d305ea5dad725e8ba13aa8",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 128,
+        "h": 64
+      },
+      "kind": "image",
+      "note": "Chromium 编码的真实 WebP（横向 2:1）"
+    },
+    {
+      "rel": "basic/webp-header-300x200.webp",
+      "size": 44,
+      "sha256": "427969c80e867d6c53fbe3aa2cbff4250eba61915ab1fdd3303707679c43f0e5",
+      "decodeVia": "bitmap-expect-fail",
+      "expect": {
+        "w": 300,
+        "h": 200
+      },
+      "kind": "webp-header",
+      "note": "仅验证尺寸解析（VP8X 分支）；自写空 VP8L，解码器拒收（已实测）"
+    },
+    {
+      "rel": "basic/jpeg-400x300.jpg",
+      "size": 1733,
+      "sha256": "d88e79a450868140e7d9bd91d367b7f6e58d5eaaa7fb23739f207e59658eb814",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 400,
+        "h": 300
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "basic/jpeg-1600x900.jpg",
+      "size": 17258,
+      "sha256": "ecbc91b5cf74869f4f7c592daf5acdcefb8d7b9c7f4ec86c4352e7158f7c18a4",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 1600,
+        "h": 900
+      },
+      "kind": "image",
+      "note": "超过 THUMB_MAX=640，必须走缩放路径"
+    },
+    {
+      "rel": "basic/svg-no-size.svg",
+      "size": 113,
+      "sha256": "a8a96977007352d7cbb0f969d71e1aaef9f5c1c0a04350a0bdef23b662ffd21a",
+      "decodeVia": "svg",
+      "expect": {
+        "w": 300,
+        "h": 150
+      },
+      "kind": "svg",
+      "note": "只有 viewBox：Chromium 的 <img> 报 300x150（实测），Node 侧刻意不解析"
+    },
+    {
+      "rel": "basic/svg-240x160.svg",
+      "size": 119,
+      "sha256": "b8e5c522c30c62e8fcb619ba627d39dce804a1064be3ab3f5e2ef7b81b84e4d4",
+      "decodeVia": "svg",
+      "expect": {
+        "w": 240,
+        "h": 160
+      },
+      "kind": "svg",
+      "note": "显式 width/height：Chromium 与 Node 都报 240x160"
+    },
+    {
+      "rel": "exif/orient-1.jpg",
+      "size": 1586,
+      "sha256": "3c7f87cead12df8abe888f59bb25b8dbdbfb32e42c31623bb762656101d271fb",
+      "decodeVia": "none",
+      "expect": {
+        "w": 320,
+        "h": 240,
+        "orientation": 1
+      },
+      "kind": "exif-jpeg",
+      "note": "存储 320x240，方向 1"
+    },
+    {
+      "rel": "exif/orient-2.jpg",
+      "size": 1586,
+      "sha256": "5759477a631e5cd33dfb128973e6012835579b754fb9c6e5d151e09976bdd817",
+      "decodeVia": "none",
+      "expect": {
+        "w": 320,
+        "h": 240,
+        "orientation": 2
+      },
+      "kind": "exif-jpeg",
+      "note": "存储 320x240，方向 2"
+    },
+    {
+      "rel": "exif/orient-3.jpg",
+      "size": 1586,
+      "sha256": "15a05bd450abd3b685a2a274d33b5559d26d7a98ef3b48fc071fddeef878fecd",
+      "decodeVia": "none",
+      "expect": {
+        "w": 320,
+        "h": 240,
+        "orientation": 3
+      },
+      "kind": "exif-jpeg",
+      "note": "存储 320x240，方向 3"
+    },
+    {
+      "rel": "exif/orient-4.jpg",
+      "size": 1586,
+      "sha256": "f0e6870f4107fc39056c1ca90f7bcff491c474799f3c612463f49adba12ab213",
+      "decodeVia": "none",
+      "expect": {
+        "w": 320,
+        "h": 240,
+        "orientation": 4
+      },
+      "kind": "exif-jpeg",
+      "note": "存储 320x240，方向 4"
+    },
+    {
+      "rel": "exif/orient-5.jpg",
+      "size": 1586,
+      "sha256": "af7ae0eb87b8b66fb409a1b58893a7f8f81e0b395c878921de95ac3766f59615",
+      "decodeVia": "none",
+      "expect": {
+        "w": 240,
+        "h": 320,
+        "orientation": 5
+      },
+      "kind": "exif-jpeg",
+      "note": "存储 320x240，方向 5"
+    },
+    {
+      "rel": "exif/orient-6.jpg",
+      "size": 1586,
+      "sha256": "417c262aa1f5c0e2aa3af4c8e5567eb686d91fd9f636bcdd276003b25ae6361f",
+      "decodeVia": "none",
+      "expect": {
+        "w": 240,
+        "h": 320,
+        "orientation": 6
+      },
+      "kind": "exif-jpeg",
+      "note": "存储 320x240，方向 6"
+    },
+    {
+      "rel": "exif/orient-7.jpg",
+      "size": 1586,
+      "sha256": "8285a35ddf82960beca11e209ddba05987f2f039990ab38e55b1732edcc57877",
+      "decodeVia": "none",
+      "expect": {
+        "w": 240,
+        "h": 320,
+        "orientation": 7
+      },
+      "kind": "exif-jpeg",
+      "note": "存储 320x240，方向 7"
+    },
+    {
+      "rel": "exif/orient-8.jpg",
+      "size": 1586,
+      "sha256": "ad9976320b35286814d9371444b77f581062b4fb99303f0f516eb865d5585084",
+      "decodeVia": "none",
+      "expect": {
+        "w": 240,
+        "h": 320,
+        "orientation": 8
+      },
+      "kind": "exif-jpeg",
+      "note": "存储 320x240，方向 8"
+    },
+    {
+      "rel": "exif/orient-none.jpg",
+      "size": 1208,
+      "sha256": "e70f63429cb97247c284e0063172d4bed85d0b69ad18706e4c3a1137d31294ef",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 320,
+        "h": 240,
+        "orientation": 0
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "raw/sony-arw-a.ARW",
+      "size": 20776,
+      "sha256": "2f5c99d6ffba48dd99d1c375096b9a0be2cfa0e5b8e0cefe9aea1a433fbd0656",
+      "decodeVia": "raw",
+      "expect": {
+        "w": 7360,
+        "h": 4912,
+        "orientation": 1,
+        "previewEmbedded": true
+      },
+      "kind": "raw",
+      "note": "内嵌 1600x1068 JPEG 预览（与 7360x4912 传感器同比例，> 8192 字节）"
+    },
+    {
+      "rel": "raw/sony-arw-b.ARW",
+      "size": 20776,
+      "sha256": "5671d694dfe5d77cf45bf30823b194ce44cd984ea85b361f642b9aa707a6de6c",
+      "decodeVia": "raw",
+      "expect": {
+        "w": 4912,
+        "h": 7360,
+        "orientation": 6,
+        "previewEmbedded": true
+      },
+      "kind": "raw",
+      "note": "内嵌 1600x1068 JPEG 预览（与 7360x4912 传感器同比例，> 8192 字节）"
+    },
+    {
+      "rel": "raw/nikon-d800.NEF",
+      "size": 20776,
+      "sha256": "3599a686854541cfd33fb410aec852ab8eef244529d3556f2dd947b601305a2b",
+      "decodeVia": "raw",
+      "expect": {
+        "w": 4912,
+        "h": 7360,
+        "orientation": 8,
+        "previewEmbedded": true
+      },
+      "kind": "raw",
+      "note": "内嵌 1600x1068 JPEG 预览（与 7360x4912 传感器同比例，> 8192 字节）"
+    },
+    {
+      "rel": "raw/canon-a.CR2",
+      "size": 20776,
+      "sha256": "7d110d5f6ff40a2e34f97ffc0ccabbec5b3807203b7ac1384bec5aaafb20d866",
+      "decodeVia": "raw",
+      "expect": {
+        "w": 5472,
+        "h": 3648,
+        "orientation": 3,
+        "previewEmbedded": true
+      },
+      "kind": "raw",
+      "note": "内嵌 1600x1067 JPEG 预览（与 5472x3648 传感器同比例，> 8192 字节）"
+    },
+    {
+      "rel": "raw/dng-sample.dng",
+      "size": 20776,
+      "sha256": "55f4fbbdae14c1a457a0b822d161849cbd0ae4be8ee45c812f4fabe6f28a96a7",
+      "decodeVia": "raw",
+      "expect": {
+        "w": 6000,
+        "h": 4000,
+        "orientation": 1,
+        "previewEmbedded": true
+      },
+      "kind": "raw",
+      "note": "内嵌 1600x1067 JPEG 预览（与 6000x4000 传感器同比例，> 8192 字节）"
+    },
+    {
+      "rel": "edge/broken.jpg",
+      "size": 27,
+      "sha256": "ec3f2773f2ab28bd1c9199f7fbb87eb7dab06b5dd7b7fe961d0018895de3f8a9",
+      "decodeVia": "none",
+      "expect": null,
+      "kind": "broken"
+    },
+    {
+      "rel": "edge/broken.png",
+      "size": 10,
+      "sha256": "f1f29480b294c3691c23f58583594cc65a07eff3e369de53434bf940acca909a",
+      "decodeVia": "none",
+      "expect": null,
+      "kind": "broken"
+    },
+    {
+      "rel": "edge/empty.jpg",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "decodeVia": "none",
+      "expect": null,
+      "kind": "broken",
+      "note": "0 字节"
+    },
+    {
+      "rel": "edge/fake.heic",
+      "size": 28,
+      "sha256": "d3e629c6aa590be889bc9b7e679c9220eca90296d493a251cdd04dba3443cf46",
+      "decodeVia": "none",
+      "expect": null,
+      "kind": "heic",
+      "note": "应显示为「无预览」占位"
+    },
+    {
+      "rel": "edge/no-extension",
+      "size": 4792,
+      "sha256": "6c167c526dee5246500d41eddd0aafb8e28fdac9647595313f630e10a5a8dd55",
+      "decodeVia": "none",
+      "expect": null,
+      "kind": "no-ext",
+      "note": "无扩展名：不在 IMAGE_EXTS 内"
+    },
+    {
+      "rel": "edge/not-an-image.txt",
+      "size": 25,
+      "sha256": "97fe11cb4eeeaf9fe85f60d1382ff1e280e758e630e56dd369fa7095694d85f4",
+      "decodeVia": "none",
+      "expect": null,
+      "kind": "text"
+    },
+    {
+      "rel": "edge/unknown.xyz",
+      "size": 15,
+      "sha256": "4954ec80a9a187b80840b2ab4bdb6358b7eb7490886948a3921b3b0c684355e9",
+      "decodeVia": "none",
+      "expect": null,
+      "kind": "unknown"
+    },
+    {
+      "rel": "edge/huge-sparse.png",
+      "size": 8780,
+      "sha256": "d9fc77cc9f83e327806a8bf06095466c203c5fa99423cfcb050f71b1f50a6213",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 64,
+        "h": 64
+      },
+      "kind": "image",
+      "note": "文件名很长"
+    },
+    {
+      "rel": "edge/ 空格 与 中文 名（含括号）ok.png",
+      "size": 11153,
+      "sha256": "cb847c13b1160e65cbce829431b20ce254eb47b57d01409896c64ca4f8f1ef08",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 80,
+        "h": 60
+      },
+      "kind": "image",
+      "note": "UTF-8 文件名 + 空格"
+    },
+    {
+      "rel": "edge/很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名很长的文件名.png",
+      "size": 2037,
+      "sha256": "bf0bf5aa09113fae8306bf7722668929854aa6b5735e44cd1925394789fb23e7",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 32,
+        "h": 32
+      },
+      "kind": "image",
+      "note": "缓存 key 需截断到 200 字符"
+    },
+    {
+      "rel": "edge/.hidden-image.png",
+      "size": 534,
+      "sha256": "d2db7e1fda8e93809e85360de492989385626c4e70cc74e07c6ca44232bdfa5b",
+      "decodeVia": "none",
+      "expect": null,
+      "kind": "hidden"
+    },
+    {
+      "rel": "edge/empty-dir/README.txt",
+      "size": 64,
+      "sha256": "e2f5a125de7e4ab41007a5bd9636180095c2afb16dd1a874f04115a4c764e312",
+      "decodeVia": "none",
+      "expect": null,
+      "kind": "marker"
+    },
+    {
+      "rel": "nested/level1/one.png",
+      "size": 22616,
+      "sha256": "b528957379505f9af5c47b8e96ad384a920adb417e3f9512353e18c52ec4b914",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 100,
+        "h": 100
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "nested/level1/level2/two.png",
+      "size": 22743,
+      "sha256": "909df10bb38c25cfca79c496c02521742f4e0388b7c3c0cab5cc9b58430c33fd",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 120,
+        "h": 80
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "nested/level1/level2/level3/three.jpg",
+      "size": 665,
+      "sha256": "baae8f3379362d32ba8026781efdc5c68ca75e7cbddc8024f2c3e20335699fc8",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 200,
+        "h": 150
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "nested/other/four.png",
+      "size": 17951,
+      "sha256": "aa2650f7e256b8d07690eda885d3395c8decdc6d948924cf0af188118eb9ac6e",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 90,
+        "h": 90
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-000.png",
+      "size": 11153,
+      "sha256": "cb847c13b1160e65cbce829431b20ce254eb47b57d01409896c64ca4f8f1ef08",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 80,
+        "h": 60
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-001.png",
+      "size": 28359,
+      "sha256": "ab4a0905da70d231801f099818873da0723ccaad3ca7f426a48cfaec3afde2e9",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 120,
+        "h": 100
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-002.png",
+      "size": 53966,
+      "sha256": "756988a878790171200a7653e97d4a54d7859392ed6431bcb6de08855c86e7d0",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 160,
+        "h": 140
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-003.png",
+      "size": 29208,
+      "sha256": "06532148e84f0dfb074fa62cbf92931991405e797f44fdca85c61ef84da6ff79",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 200,
+        "h": 60
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-004.png",
+      "size": 18523,
+      "sha256": "9c8968fa5a6209e421d1535b4701ebd8514f02c8df905ac135d05dc34479ea7e",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 80,
+        "h": 100
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-005.png",
+      "size": 39674,
+      "sha256": "55fb668ca6b7e3c958a5d17c43e118e4dc8237368b6ff4207e7c2063a59de119",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 120,
+        "h": 140
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-006.png",
+      "size": 23187,
+      "sha256": "60e83c00b6c56ad12d9483fa4634324946b32f2400cc4cb151934f5a8d73b75f",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 160,
+        "h": 60
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-007.png",
+      "size": 48637,
+      "sha256": "05bbc697549a2df2a3edd597c3c4250ae062a053df82bd3a02a8b746195b3fb2",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 200,
+        "h": 100
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-008.png",
+      "size": 25770,
+      "sha256": "0d95d6e583a18127163da0e4e1a5477740685077240887ae3128b3d2ad560131",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 80,
+        "h": 140
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-009.png",
+      "size": 17001,
+      "sha256": "c4295f86651d97da1785d64ec8e8aaed649341632635514b5e4c875723ebc965",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 120,
+        "h": 60
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-010.png",
+      "size": 38862,
+      "sha256": "e7b20bce299d131d3bb74d7991d2c11737eb639861861afe4eabf5bc700b55e9",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 160,
+        "h": 100
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-011.png",
+      "size": 68087,
+      "sha256": "7cb50479e51bd389895e3b6d3b5235a7d7f77211b491eb4909320dfbebfa0db0",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 200,
+        "h": 140
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-012.png",
+      "size": 11153,
+      "sha256": "cb847c13b1160e65cbce829431b20ce254eb47b57d01409896c64ca4f8f1ef08",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 80,
+        "h": 60
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-013.png",
+      "size": 28359,
+      "sha256": "ab4a0905da70d231801f099818873da0723ccaad3ca7f426a48cfaec3afde2e9",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 120,
+        "h": 100
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-014.png",
+      "size": 53966,
+      "sha256": "756988a878790171200a7653e97d4a54d7859392ed6431bcb6de08855c86e7d0",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 160,
+        "h": 140
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-015.png",
+      "size": 29208,
+      "sha256": "06532148e84f0dfb074fa62cbf92931991405e797f44fdca85c61ef84da6ff79",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 200,
+        "h": 60
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-016.png",
+      "size": 18523,
+      "sha256": "9c8968fa5a6209e421d1535b4701ebd8514f02c8df905ac135d05dc34479ea7e",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 80,
+        "h": 100
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-017.png",
+      "size": 39674,
+      "sha256": "55fb668ca6b7e3c958a5d17c43e118e4dc8237368b6ff4207e7c2063a59de119",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 120,
+        "h": 140
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-018.png",
+      "size": 23187,
+      "sha256": "60e83c00b6c56ad12d9483fa4634324946b32f2400cc4cb151934f5a8d73b75f",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 160,
+        "h": 60
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-019.png",
+      "size": 48637,
+      "sha256": "05bbc697549a2df2a3edd597c3c4250ae062a053df82bd3a02a8b746195b3fb2",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 200,
+        "h": 100
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-020.png",
+      "size": 25770,
+      "sha256": "0d95d6e583a18127163da0e4e1a5477740685077240887ae3128b3d2ad560131",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 80,
+        "h": 140
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-021.png",
+      "size": 17001,
+      "sha256": "c4295f86651d97da1785d64ec8e8aaed649341632635514b5e4c875723ebc965",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 120,
+        "h": 60
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-022.png",
+      "size": 38862,
+      "sha256": "e7b20bce299d131d3bb74d7991d2c11737eb639861861afe4eabf5bc700b55e9",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 160,
+        "h": 100
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "many/img-023.png",
+      "size": 68087,
+      "sha256": "7cb50479e51bd389895e3b6d3b5235a7d7f77211b491eb4909320dfbebfa0db0",
+      "decodeVia": "bitmap",
+      "expect": {
+        "w": 200,
+        "h": 140
+      },
+      "kind": "image"
+    },
+    {
+      "rel": "real/20220508_022232.jpg",
+      "size": 156537,
+      "sha256": "ec967fc6de31c26521cdb41271d650cf91f1f6663dab59b487e9a4dbdc3f5e2a",
+      "kind": "real-image",
+      "decodeVia": "bitmap-nosize",
+      "expect": null,
+      "real": true,
+      "source": "D:\\图片\\iCloud 照片\\iCloud 照片\\20220508_022232.jpg"
+    },
+    {
+      "rel": "real/20220509_181657.jpg",
+      "size": 450454,
+      "sha256": "20f9ba78cd9279dccb5f051509519ea3dcf96e61c0d311d26fc9261ff146666b",
+      "kind": "real-image",
+      "decodeVia": "bitmap-nosize",
+      "expect": null,
+      "real": true,
+      "source": "D:\\图片\\iCloud 照片\\iCloud 照片\\20220509_181657.jpg"
+    },
+    {
+      "rel": "real/6fe77aa16cbd6e5c.png",
+      "size": 976470,
+      "sha256": "60919325036a0336697cb3556ddf78636f84e38d41d5b7986d17439f4732934e",
+      "kind": "real-image",
+      "decodeVia": "bitmap-nosize",
+      "expect": null,
+      "real": true,
+      "source": "D:\\图片\\iCloud 照片\\iCloud 照片\\6fe77aa16cbd6e5c.png"
+    },
+    {
+      "rel": "real/HhB28Lg_waifu2x_photo_noise1_scale-1.png",
+      "size": 3925364,
+      "sha256": "0b11b3b46981000f14a9740333a7ed7531515df7933ebe0375c5091e9c1addde",
+      "kind": "real-image",
+      "decodeVia": "bitmap-nosize",
+      "expect": null,
+      "real": true,
+      "source": "D:\\图片\\iCloud 照片\\iCloud 照片\\HhB28Lg_waifu2x_photo_noise1_scale-1.png"
+    },
+    {
+      "rel": "real/3904bd21ea9b3192f4078359f93304f8.gif",
+      "size": 4955640,
+      "sha256": "f18206989fd9b05971c301aa34683a55d2315e6ebfc0a3438e41e4444b0ef3d9",
+      "kind": "real-image",
+      "decodeVia": "bitmap-nosize",
+      "expect": null,
+      "real": true,
+      "source": "D:\\图片\\iCloud 照片\\iCloud 照片\\3904bd21ea9b3192f4078359f93304f8.gif"
+    },
+    {
+      "rel": "real/IMG_5540.HEIC",
+      "size": 855458,
+      "sha256": "6991ea51d28c9391595aea0d8ce0d92633a0df79aedd205e314cb2a1a536194b",
+      "kind": "heic",
+      "decodeVia": "heic-none",
+      "expect": null,
+      "real": true,
+      "source": "D:\\图片\\iCloud 照片\\iCloud 照片\\IMG_5540.HEIC"
+    }
+  ],
+  "dirs": [
+    "basic",
+    "edge",
+    "edge/empty-dir",
+    "exif",
+    "many",
+    "nested",
+    "nested/level1",
+    "nested/level1/level2",
+    "nested/level1/level2/level3",
+    "nested/other",
+    "raw",
+    "real"
+  ]
+}

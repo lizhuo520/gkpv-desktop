@@ -1,0 +1,44 @@
+{
+  "generatedBy": "tools/capture-samples.mjs",
+  "samples": [
+    {
+      "file": "webp-64x64.webp",
+      "width": 64,
+      "height": 64,
+      "requestedMime": "image/webp",
+      "mime": "image/webp",
+      "bytes": 782,
+      "sha256": "00d2df53596e313a1693b889624967dde8253e8acbbc045cabda38bfe1273dac",
+      "decoded": {
+        "width": 64,
+        "height": 64
+      }
+    },
+    {
+      "file": "webp-128x64.webp",
+      "width": 128,
+      "height": 64,
+      "requestedMime": "image/webp",
+      "mime": "image/webp",
+      "bytes": 920,
+      "sha256": "c77b7ae6c4df11a8a2825eb68e4f71e74083b00b40d305ea5dad725e8ba13aa8",
+      "decoded": {
+        "width": 128,
+        "height": 64
+      }
+    },
+    {
+      "file": "jpeg-64x64.jpg",
+      "width": 64,
+      "height": 64,
+      "requestedMime": "image/jpeg",
+      "mime": "image/jpeg",
+      "bytes": 1042,
+      "sha256": "6cbceaa4d141d02a1c530ad2982da2650eb7103251844efd755d1a455238156d",
+      "decoded": {
+        "width": 64,
+        "height": 64
+      }
+    }
+  ]
+}
