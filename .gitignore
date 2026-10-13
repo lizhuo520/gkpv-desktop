@@ -1,7 +1,86 @@
-# 历史备份快照：内容已固化成 git tag（见 使用说明.txt），不再纳入版本管理。
-# 文件仍留在磁盘上；要看某个阶段用 `git checkout <tag> -- gkpv.html`。
-gkpv.html.*
+# =====================================================================
+# GKP 照片查看器 —— 版本管理忽略规则
+# 原则：可再生成的产物、依赖、运行期现场文件不入库；源码与测试夹具生成脚本入库。
+# =====================================================================
 
-# Windows 噪声
+# ---- 历史备份快照 ----
+# 内容已固化成 git tag（en/zh/opt/precount/preraw/prenef/v1.1/v1.2），不再逐次入库。
+gkpv.html.*
+*.bak
+*.orig
+*.rej
+
+# ---- Node / Electron ----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.eslintcache
+
+# ---- 构建产物（可再生成）----
+dist/
+build/*
+!build/icon.ico
+!build/icon.png
+out/
+release/
+desktop/dist/
+desktop/out/
+*.asar
+*.blockmap
+*.unpacked
+*.nsis.7z
+GKP Viewer.exe
+
+# ---- 测试产物 ----
+tests/fixtures/generated/
+tests/artifacts/
+
+# ---- 真实样片（不入库）----
+# `tests/fixtures/real/` 里是从本机相册（默认 D:\图片\iCloud 照片）复制的
+# **真实个人照片**，只有 HEIC 与常见格式的"真解码"覆盖需要它们。
+# 公开仓库不包含个人照片，所以整目录忽略。
+# 克隆后想恢复这块覆盖（本机有相册时）：
+#     npm run fixtures                  # 自动重建 real/
+#     npm run fixtures -- --no-real     # 明确不要真实样片（CI 走这条）
+# 依赖它的测试在目录缺失时会跳过并打印原因，不会假装通过。
+tests/fixtures/real/
+test-results/
+playwright-report/
+blob-report/
+coverage/
+.nyc_output/
+
+# ---- 开发期临时脚本与现场文件 ----
+# `.acp-*` 是排查问题时用的一次性探针（跑真 Electron、看协议/解码行为），
+# 结论都已写回源码注释与 docs/，脚本本身没有复用价值，不入库。
+.acp-*
+.cache/
+.tmp-*
+
+# ---- 可选：本机临时装的 Pillow（跨编码器对照用）----
+# `npm run gif-reference` 需要一个独立于本项目的 GIF 编码器做交叉验证。
+# 本机 Python 环境若装不了 Pillow，可以 `pip install --target .pylibs Pillow`，
+# 这属于本机环境、不入库。没装时该脚本会打印获取方法并以非零码退出（不谎报通过）。
+.pylibs/
+
+# ---- 运行期现场文件 ----
+*.log
+serve.err.txt
+serve.out.txt
+gkpv-server-state.json
+gkpv.log
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+*.swp
+*~
 Thumbs.db
-desktop.ini
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# ---- 临时文件 ----
+*.tmp
