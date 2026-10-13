@@ -35,11 +35,25 @@
 详细论证见 [`docs/feasibility.md`](docs/feasibility.md)，阶段划分与测试覆盖见
 [`docs/test-plan.md`](docs/test-plan.md)，手工验收清单见 [`docs/acceptance.md`](docs/acceptance.md)。
 
+### 下载 / 版本管理
+
+- 仓库：<https://github.com/lizhuo520/gkpv-desktop>
+- 安装包：[`v2.0.0` Release](https://github.com/lizhuo520/gkpv-desktop/releases/tag/v2.0.0)
+  （`setup.exe` 安装版 / `portable.exe` 免安装版）
+- 阶段标签：`v2.0.0-alpha.1` → `v2.0.0-alpha.2` → `v2.0.0-beta.1` → `v2.0.0`
+- 持续集成：[GitHub Actions](https://github.com/lizhuo520/gkpv-desktop/actions)
+  （windows-latest：单元 → 端到端 → 打包 → 产物冒烟）
+
 ### 开发
 
 ```powershell
 npm.cmd install          # 国内网络慢可加镜像，见 tools/pack.mjs 里的 GKPV_MIRROR
 npm.cmd run fixtures     # 生成测试素材（72 个，可重复生成）
+
+# ⚠ 手工验证时必须先删掉这个变量：若为 1，electron 与打包产物都会退化成纯 Node，
+#    表现为「exe 秒退且没有任何输出」，很容易误判成产物坏了
+Remove-Item Env:\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+
 npm.cmd start            # 起开发窗口
 npm.cmd run test:unit    # 单元测试（26 条）
 npm.cmd run test:e2e     # 端到端（43 条，会真的开 Electron 窗口）
@@ -49,6 +63,8 @@ npm.cmd run smoke:pack   # 打包产物冒烟
 ```
 
 > PowerShell 执行策略会拦住 `npm.ps1`，用 `npm.cmd`。
+> 需要 `real/` 目录里的个人真实照片才有 43/43；素材不入库，缺失时相关用例记「跳过」并打印原因
+> （详见 `docs/test-plan.md`），不会假装通过。
 
 ---
 
