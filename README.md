@@ -54,6 +54,10 @@ npm.cmd run fixtures     # 生成测试素材（72 个，可重复生成）
 #    表现为「exe 秒退且没有任何输出」，很容易误判成产物坏了
 Remove-Item Env:\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 
+# ⚠ electron 的二进制不是 npm install 时下载的，而是首次 require 时惰性下载。
+#    受限网络下会看到「Downloading Electron binary...」后失败，指向镜像即可：
+$env:ELECTRON_MIRROR = "https://registry.npmmirror.com/-/binary/electron/"
+
 npm.cmd start            # 起开发窗口
 npm.cmd run test:unit    # 单元测试（26 条）
 npm.cmd run test:e2e     # 端到端（43 条，会真的开 Electron 窗口）

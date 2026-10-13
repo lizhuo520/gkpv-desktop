@@ -130,9 +130,10 @@
 | 打包冒烟 | `npm.cmd run smoke:pack` | **8 / 8 通过**（跑 `dist/win-unpacked/GKP Viewer.exe`：开窗、`app://` 源、解码出 400×300 缩略图、关窗无残留进程） |
 | 测试素材校验 | 单测前 3 条 | 72 个素材 sha256 全一致（`real/` 不入库时按 66 个计） |
 | GIF 跨编码器校验 | `npm.cmd run gif-reference:check` | 冻结的 Pillow 参照物 273 B / `6a96068a…` 就位 |
-| 持续集成 | [Actions run #2](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38427067137) | **success**：装依赖 → 生成素材（`--no-real`）→ 单元 26/26 → 端到端 42 通过 + 1 跳过、0 失败 → 打包（解包目录）→ 产物冒烟 8/8 |
+| 持续集成 | [Actions run #4](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38429878730) | **success**（跑在最终提交 `0bb15b1`）：装依赖 → 生成素材（`--no-real`）→ 单元 26/26 → 端到端 42 通过 + 1 跳过、0 失败 → 打包（解包目录）→ 产物冒烟 8/8。首轮 [run #1](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38419823934) 曾在 CI 上暴露两条「假红」（依赖不入库的个人相册素材），修复见 `docs/CHANGELOG.md` |
 | 安装/卸载流程 | `setup.exe /S /D=<临时目录>` → 启动 → 再启动 → `Uninstall GKP Viewer.exe /S` | **通过**（见下表） |
 | 发布产物 | [Release v2.0.0](https://github.com/lizhuo520/gkpv-desktop/releases/tag/v2.0.0) | 两个资产已上传：`GKP.Viewer-2.0.0-setup.exe` 106.3 MB、`GKP.Viewer-2.0.0-portable.exe` 106.1 MB；tag `v2.0.0` → `539d759` |
+| 全新克隆复现 | `git clone` → `npm ci` → `fixtures --no-real` → 单元 → 端到端 → `pack` → `smoke:pack` | **通过**：全链路在临时目录里从零复现（单元 26/26、端到端 42+1 跳过、打包 29.4s、冒烟 8/8）。这一步抓出「electron 二进制惰性下载 + 受限网络」的真坑，见 `docs/test-plan.md` 第十节 |
 
 ### 安装包与便携版的实测记录（对应第一节 1.1~1.3、1.6 与第八节）
 

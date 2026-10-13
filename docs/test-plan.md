@@ -229,6 +229,12 @@ tests/
 # 0) 依赖（国内网络加镜像，见 README）
 npm.cmd install
 
+# 0.2) 首次跑 E2E/start 前，如果不通 GitHub，先给 electron 二进制指个镜像。
+#      electron 44 的二进制**不是 npm install 时下载的**，而是第一次 require('electron')
+#      时才惰性下载。受限网络下会看到「Downloading Electron binary...」之后失败，
+#      报「Electron failed to install correctly」—— 那不是项目坏了，只是源不通。
+$env:ELECTRON_MIRROR = "https://registry.npmmirror.com/-/binary/electron/"
+
 # 0.5) 关键前置：删掉这个环境变量，否则 electron.exe 退化成纯 Node、应用永远起不来
 #      （现象：exe 秒退、无任何输出。打包产物同样受影响 —— 实测踩到过）
 Remove-Item Env:\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
@@ -279,4 +285,40 @@ Start-Process (Get-ChildItem $target -Filter "Uninstall*.exe").FullName -Argumen
 > 崩溃日志的预期行为：正常关窗**不会**产生 `gkpv-crash.log`。只有进程被强杀
 > （任务管理器结束进程 / `Stop-Process -Force`）时，主进程会先观察到子进程消失并写入一条记录，
 > 于是留下一个 0 字节文件 —— 这是**正常**的，不是崩溃证据；有内容才代表出过问题。
+
+---
+
+## 十、全新克隆复现验证（端到端可复现性的硬证据）
+
+不只在本机工作树上跑通，还从 GitHub **全新克隆**到临时目录跑了一遍完整链路
+（2026-10-14，`C:\Users\Lizhuo\AppData\Local\Temp\gkpv-clone-check`，不含任何本地状态）：
+
+| 步骤 | 命令 | 结果 |
+| --- | --- | --- |
+| 克隆 | `git clone https://github.com/lizhuo520/gkpv-desktop.git <临时目录>` | ✔ 退出码 0，147 个文件（不含 `.git`） |
+| 装依赖 | `npm.cmd ci` | ✔ 285 个包，3s |
+| 生成素材 | `npm.cmd run fixtures -- --no-real` | ✔ 66 个文件（CI 同款路径） |
+| 单元测试 | `npm.cmd run test:unit` | ✔ **26/26**，168ms |
+| 端到端 | `node tests\e2e\run.mjs` | ✔ **42 通过 + 1 跳过、0 失败**，33s（`real/` 未入库，跳过原因已打印） |
+| 打包 | `$env:GKPV_MIRROR="1"; npm.cmd run pack` | ✔ 29.4s，产出 portable 106.1 MB / setup 106.3 MB |
+| 产物冒烟 | `npm.cmd run smoke:pack` | ✔ **8/8**，3.4s（`app://` 源、缩略图 400×300、关窗无残留） |
+
+**这一步抓出的真问题**：首次在克隆里跑 E2E **失败**了，报
+
+```
+Downloading Electron binary...
+找不到 electron.exe：… Electron failed to install correctly.
+```
+
+根因不是项目缺陷，而是 **electron 44 的二进制是惰性下载的**：`node_modules/electron/index.js`
+在第一次 `require('electron')` 时才 `spawnSync` 跑 `install.js` 去 GitHub 拉二进制，
+`npm ci` 阶段什么都不下载。受限网络下这一步必失败，而报错信息**完全不提镜像**。
+已落地的改进：① `tests/e2e/lib/paths.mjs` 的 `resolveElectron()` 在错误信息里直接给出
+`ELECTRON_MIRROR` 的修法；② `tests/e2e/run.mjs` 启动横幅预先说明这行输出是什么；
+③ 本节与第九节把镜像步骤写进复现流程。
+
+> 这也解释了为什么本机工作树一直没踩到：`node_modules/electron/dist/` 早就下好了。
+> **有 CI 的机器不会踩（首次步骤就下）、全新克隆的机器必踩** —— 属于典型的
+> 「只有真正从零复现才会暴露」的问题，所以这条验证步骤留在流程里。
+
 

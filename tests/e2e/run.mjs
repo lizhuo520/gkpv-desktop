@@ -176,6 +176,11 @@ async function main() {
   out('gkpv 桌面版 E2E（playwright-core + Electron，真窗口）');
   out('='.repeat(78));
 
+  // 全新克隆 + 受限网络下，electron 二进制会在下面这行「首次 require」时才去下载（GitHub 源）。
+  // 提前说一句，免得把「下载源不通」误读成「项目坏了」。
+  out('（若出现 “Downloading Electron binary...”，那是 electron 44 首次 require 时才拉二进制；');
+  out('  下载源不通时设 $env:ELECTRON_MIRROR = "https://registry.npmmirror.com/-/binary/electron/" 重跑）');
+
   // ---------- 环境自检 ----------
   let exe = null;
   let exeVia = '';

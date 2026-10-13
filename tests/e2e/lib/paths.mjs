@@ -40,6 +40,12 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /**
  * 找 electron.exe：优先 `require('electron')`（返回 exe 路径字符串），
  * 再按候选路径探测。找不到就把尝试过的每一步写进错误里。
+ *
+ * 注意（2025 在全新克隆上实测到的坑）：electron 44 的二进制**不是安装时下载的**，
+ * 而是第一次 `require('electron')` 时才惰性下载（见 node_modules/electron/index.js）。
+ * 于是全新克隆 + 受限网络下，第一次跑 E2E 会看到
+ * 「Downloading Electron binary...」紧跟着「Electron failed to install correctly」——
+ * 那不是项目坏了，只是下载源（GitHub）不通，用 ELECTRON_MIRROR 指到镜像即可。
  */
 export function resolveElectron() {
   const tried = [];
@@ -62,7 +68,14 @@ export function resolveElectron() {
     tried.push(c);
     if (fs.existsSync(c)) return { exe: c, via: '候选路径', tried };
   }
-  throw new Error(`找不到 electron.exe。尝试过：\n  ${tried.join('\n  ')}`);
+  throw new Error(
+    `找不到 electron.exe。尝试过：\n  ${tried.join('\n  ')}\n\n` +
+      `提示：electron 44 的二进制是首次 require('electron') 时才下载的（不是 npm install 时）。\n` +
+      `若上面出现「Downloading Electron binary...」后失败，说明默认下载源（GitHub）不通，改用镜像即可：\n` +
+      `  $env:ELECTRON_MIRROR = "https://registry.npmmirror.com/-/binary/electron/"\n` +
+      `  node tests\\e2e\\run.mjs\n` +
+      `（打包脚本 tools/pack.mjs 已支持 GKPV_MIRROR=1 做同样的事。）`,
+  );
 }
 
 export function packageVersion(name, fallback = '?') {

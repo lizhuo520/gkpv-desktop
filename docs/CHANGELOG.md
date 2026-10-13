@@ -76,10 +76,18 @@ EXIF 解析、RAW 处理、虚滚动、灯箱、排序筛选全部沿用原实�
 - 仓库：[`lizhuo520/gkpv-desktop`](https://github.com/lizhuo520/gkpv-desktop)；发布页：
   [`v2.0.0` Release](https://github.com/lizhuo520/gkpv-desktop/releases/tag/v2.0.0)（附 setup 与 portable 两个安装包）。
 - 阶段标签：`v2.0.0-alpha.1`（骨架）→ `v2.0.0-alpha.2`（渲染层可跑）→ `v2.0.0-beta.1`（测试全绿）→ `v2.0.0`。
-- 持续集成：[Actions run #2](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38427067137) 在
+- 持续集成：[Actions run #4](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38429878730) 在
   windows-latest 上全绿（装依赖 → 生成素材 → 单元 26/26 → 端到端 42 通过 + 1 跳过 → 打包 → 产物冒烟 8/8）。
+  首轮 [run #1](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38419823934) 曾暴露过两条「假红」
+  ——它们依赖不入库的个人相册素材，现已改为「跳过」或降级到等价素材。
 - 安装/卸载流程已脚本化实测：静默安装 7s、快捷方式创建成功、安装版 2s 开窗、便携版 4s 开窗、
   二次启动不新开窗口、关窗无残留进程、静默卸载后目录与快捷方式清除干净。明细见 `docs/acceptance.md` 第十节。
+- **端到端可复现性已用全新克隆验证**：从 GitHub 克隆到临时目录（无任何本地状态）后
+  `npm ci` → `fixtures --no-real` → 单元 26/26 → 端到端 42 通过 + 1 跳过 → 打包 29.4s → 产物冒烟 8/8。
+  这一步抓出一个只有「真正从零复现」才会暴露的问题：**electron 44 的二进制是首次
+  `require('electron')` 时才惰性下载的**（`npm ci` 阶段不下载），受限网络下会失败且报错不提镜像。
+  现在 `resolveElectron()` 的报错、E2E 启动横幅与两份文档都直接给出 `ELECTRON_MIRROR` 的修法。
+  完整记录见 `docs/test-plan.md` 第十节。
 
 ---
 
