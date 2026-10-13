@@ -12,7 +12,7 @@
 
 ### 使用
 
-1. 装 `GKP Viewer-2.0.0-setup.exe`，或直接用免安装的 `GKP Viewer-2.0.0-portable.exe`；
+1. 装 `GKP Viewer-2.0.1-setup.exe`，或直接用免安装的 `GKP Viewer-2.0.1-portable.exe`；
 2. 点工具栏「打开文件夹」选一个照片目录；
 3. 想连子文件夹一起看，点「递归」。
 
@@ -38,9 +38,10 @@
 ### 下载 / 版本管理
 
 - 仓库：<https://github.com/lizhuo520/gkpv-desktop>
-- 安装包：[`v2.0.0` Release](https://github.com/lizhuo520/gkpv-desktop/releases/tag/v2.0.0)
-  （`setup.exe` 安装版 / `portable.exe` 免安装版）
-- 阶段标签：`v2.0.0-alpha.1` → `v2.0.0-alpha.2` → `v2.0.0-beta.1` → `v2.0.0`
+- 最新安装包：[`v2.0.1` Release](https://github.com/lizhuo520/gkpv-desktop/releases/tag/v2.0.1)
+  （`setup.exe` 安装版 / `portable.exe` 免安装版；修正了 2.0.0 里 exe 仍带 Electron 默认图标与
+  `ProductName=Electron` 的问题，详见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)）
+- 阶段标签：`v2.0.0-alpha.1` → `v2.0.0-alpha.2` → `v2.0.0-beta.1` → `v2.0.0` → `v2.0.1`
 - 持续集成：[GitHub Actions](https://github.com/lizhuo520/gkpv-desktop/actions)
   （windows-latest：单元 → 端到端 → 打包 → 产物冒烟）
 

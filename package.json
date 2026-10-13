@@ -1,6 +1,6 @@
 {
   "name": "gkpv-desktop",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "gkpv 照片浏览器的 Electron 桌面版：从零依赖单文件网页移植而来，保留全部原有功能并独立成窗口",
   "type": "module",

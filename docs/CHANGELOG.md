@@ -91,6 +91,35 @@ EXIF 解析、RAW 处理、虚滚动、灯箱、排序筛选全部沿用原实�
 
 ---
 
+## [2.0.1] — 图标与版本信息修正
+
+2.0.0 的安装包外壳有图标，但**装完的应用本身没有**：任务栏、标题栏、exe 文件属性里
+显示的都是 Electron 自带的原子图标，`ProductName` 写着 `Electron`、`CompanyName` 写着
+`GitHub, Inc.`。所有功能测试当时都是全绿的 —— 因为 Playwright 能看到的是窗口里的页面，
+看不到 exe 自己的资源。
+
+### 修复
+
+- **`signAndEditExecutable: false` → `true`**（`electron-builder.yml`）。这个开关管的是
+  **两件事**：签名 *和* 用 rcedit 改 exe 资源。为「不做代码签名」而关掉它，会把 rcedit
+  一起关掉 —— 图标与版本信息都是 rcedit 写进去的。没有配置证书时 electron-builder 只做
+  rcedit、不会真的签名，所以「不做签名」这个决定不受影响（首次运行仍会出现「未知发布者」提示）。
+  `GKP Viewer.exe` 现在是：`ProductName=GKP Viewer`、`CompanyName=lizhuo520`、`FileVersion=2.0.1`，
+  图标与 `build/icon.png` 一致。
+- **产物冒烟测试补两条「Playwright 看不见」的检查**（`tests/pack/smoke-packaged.mjs`）：
+  把 `build/icon.ico` 里最大的一张图（PNG 编码）的字节拿去在 exe 里做子串查找，
+  并检查 UTF-16 下 `lizhuo520` 在、`GitHub, Inc.` 不在。**已用反例验证过**：
+  把未 rcedit 的 `node_modules/electron/dist/electron.exe` 喂给脚本，第 1 项就报错并以退出码 1 结束。
+  冒烟项数 8 → 10。
+
+### 说明
+
+- 2.0.0 的 tag 与它的 Release **保留不动**（它如实记录了当时的状态与产物）；2.0.1 的产物
+  在 Release 页另附，SHA256 见 `docs/acceptance.md` 第十节。
+- 除图标与版本信息外，2.0.1 与 2.0.0 **产品代码完全一致**（本次只改了打包配置、版本号与测试脚本）。
+
+---
+
 ## 网页版历史（1.x，移植前的开发过程）
 
 - **v1.2** — RAW 方向转正 + RAW EXIF：认识到内嵌预览**不带**方向标记，改为按容器 IFD0 自己转。

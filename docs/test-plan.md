@@ -42,7 +42,7 @@ tests/
 | 素材自检 | 素材与 manifest 是否一一对应、字节是否被意外改动 | `npm run test:unit` | 结构性断言全过 |
 | 单元 | 主进程扫盘、尺寸解析、mime、内嵌预览提取、边界 | `npm run test:unit` | 26/26 |
 | 端到端 | 真窗口里的扫描/缩略图/灯箱/递归/边界目录 | `npm run test:e2e` | 有 `real/` 素材时 43/43；无素材时 42 通过 + 1 跳过，**0 失败** |
-| 打包冒烟 | `dist/` 产物启动后能扫目录、能解码 | `npm run smoke:pack` | 全绿 |
+| 打包冒烟 | `dist/` 产物启动后能扫目录、能解码，**且 exe 自己的图标与版本信息是我们的** | `npm run smoke:pack` | 全绿（10 项） |
 | 全量 | 上面全部 | `npm test` | 全绿 |
 
 ---
@@ -301,7 +301,7 @@ Start-Process (Get-ChildItem $target -Filter "Uninstall*.exe").FullName -Argumen
 | 单元测试 | `npm.cmd run test:unit` | ✔ **26/26**，168ms |
 | 端到端 | `node tests\e2e\run.mjs` | ✔ **42 通过 + 1 跳过、0 失败**，33s（`real/` 未入库，跳过原因已打印） |
 | 打包 | `$env:GKPV_MIRROR="1"; npm.cmd run pack` | ✔ 29.4s，产出 portable 106.1 MB / setup 106.3 MB |
-| 产物冒烟 | `npm.cmd run smoke:pack` | ✔ **8/8**，3.4s（`app://` 源、缩略图 400×300、关窗无残留） |
+| 产物冒烟 | `npm.cmd run smoke:pack` | ✔ **8/8**（当时），3.4s（`app://` 源、缩略图 400×300、关窗无残留）。注：冒烟项数已增加到 10 项，多了「exe 内嵌自己的图标」「版本信息不含 Electron 的 `GitHub, Inc.`」两条 |
 
 **这一步抓出的真问题**：首次在克隆里跑 E2E **失败**了，报
 

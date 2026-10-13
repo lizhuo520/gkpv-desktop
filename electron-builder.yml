@@ -42,10 +42,13 @@ win:
       arch: [x64]
   icon: icon.ico
   artifactName: ${productName}-${version}-${arch}-${target}.${ext}
-  # 本轮明确不做代码签名：跳过签名与 rcedit 改可执行文件，
-  # 免得在没有证书的环境里卡在 winCodeSign 下载上（首次运行会出现
-  # 「未知发布者」提示，这是预期行为，已在 README 与验收清单里说明）。
-  signAndEditExecutable: false
+  # 必须保持 true：它同时管着「签名」和「rcedit 改 exe 资源」两件事。
+  # 关掉连 rcedit 一起关，GKP Viewer.exe 会保留 Electron 自带的原子图标，
+  # 文件属性里 ProductName 也还是 "Electron" —— 安装包外壳有图标、装完的
+  # 应用却没有，是最容易被忽略的那种缺陷（已实测，见 docs/acceptance.md）。
+  # 没有配置证书时 electron-builder 只做 rcedit、不会真的签名，
+  # 因此「不做代码签名」这个决定不受影响（首次运行仍会出现「未知发布者」提示）。
+  signAndEditExecutable: true
   verifyUpdateCodeSignature: false
 
 nsis:

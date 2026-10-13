@@ -64,6 +64,52 @@ if (!fs.existsSync(FIXTURES)) {
   process.exit(1);
 }
 
+/* ---------------- 产物身份：图标与版本信息 ----------------
+ *
+ * 这一段是「Playwright 看不见」的部分：窗口能不能开、模块有没有加载，都证明不了
+ * exe 自己有没有带上我们的图标与版本信息。曾经踩过：electron-builder 的
+ * `signAndEditExecutable: false` 会把签名和 rcedit 一起关掉，于是安装包外壳有图标、
+ * 装完的 GKP Viewer.exe 却还是 Electron 的原子图标，文件属性里 ProductName 写着
+ * "Electron"、CompanyName 写着 "GitHub, Inc." —— 跑任何功能测试都是全绿的。
+ *
+ * 检测手段（都不需要额外依赖）：
+ *   图标：从 build/icon.ico 里取出最大的那张图（PNG 编码）的字节，
+ *         直接看它在 exe 里有没有出现。未 rcedit 的 electron.exe 里没有这串字节。
+ *   版本信息：rcedit 会把 VERSIONINFO 换成我们的值，UTF-16 下的 "GitHub, Inc."
+ *         随之消失、我们的公司名出现。
+ */
+
+const ICON_ICO = path.join(ROOT, 'build', 'icon.ico');
+if (fs.existsSync(ICON_ICO)) {
+  const ico = fs.readFileSync(ICON_ICO);
+  const count = ico.readUInt16LE(4);
+  let biggest = null;
+  for (let i = 0; i < count; i++) {
+    const off = 6 + i * 16;
+    const size = ico.readUInt32LE(off + 8);
+    const dataOff = ico.readUInt32LE(off + 12);
+    if (!biggest || size > biggest.size) biggest = { size, dataOff };
+  }
+  const iconPng = biggest ? ico.subarray(biggest.dataOff, biggest.dataOff + biggest.size) : null;
+  const exeBuf = fs.readFileSync(exe);
+  assert(
+    iconPng && iconPng[0] === 0x89 && exeBuf.includes(iconPng),
+    `产物内嵌了自己的图标（不是 Electron 默认的原子图标）`,
+    { iconBytes: iconPng ? iconPng.length : 0 },
+  );
+
+  const u16 = (s) => Buffer.from(s, 'utf16le');
+  const hasOurs = exeBuf.includes(u16('lizhuo520'));
+  const hasElectron = exeBuf.includes(u16('GitHub, Inc.'));
+  assert(
+    hasOurs && !hasElectron,
+    '产物版本信息已改成 GKP Viewer（不含 Electron 的 "GitHub, Inc."）',
+    { hasOurs, hasElectron },
+  );
+} else {
+  process.stdout.write(`  · 跳过图标/版本信息检查（没有 ${ICON_ICO}，先跑 npm run icon）\n`);
+}
+
 // 每条会话独立 userData：否则单实例锁会让第二次运行直接退出，
 // 而且 OPFS 缩略图缓存会在用例之间互相污染。
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'gkpv-pack-smoke-'));
