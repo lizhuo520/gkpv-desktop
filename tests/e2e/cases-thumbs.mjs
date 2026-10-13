@@ -127,12 +127,12 @@ export default [
 
   {
     name: 'thumbs:heic-placeholder-not-a-failure',
-    intent: 'HEIC 走「无预览」占位（不占失败计数）：edge/fake.heic 与 real/ 里的真实 HEIC 都是占位，real/ 其它图正常解码',
+    intent: 'HEIC 走「无预览」占位：edge/fake.heic 带格式角标、没有图片来源、已就绪，且不计入生成失败',
     async fn(ctx) {
       const { A, session } = ctx;
       const edge = ctx.expectedForDir('edge');
       await session.showDir('edge', { expectImages: edge.total });
-      let tiles = await session.tiles();
+      const tiles = await session.tiles();
       for (const name of edge.unsupported) {
         const t = tiles.find((x) => x.rel === name);
         A.check(t, `${name} 应有磁贴（不能因为解码不了就不显示）`);
@@ -144,9 +144,23 @@ export default [
       const afterEdge = await session.counters();
       A.check(afterEdge.failed >= edge.broken.size, `edge/ 的失败计数应 >= ${edge.broken.size}，实际 ${afterEdge.failed}`);
       A.note(`HEIC 占位：${[...edge.unsupported].join(', ')}（角标/无图源/已就绪）`);
+      await session.gotoRoot();
+    },
+  },
 
+  {
+    // 与上一条分开，是因为这一条的素材条件**不是每个环境都成立**：real/ 里放的是
+    // 个人真实照片（不入库，CI 用 --no-real 生成素材后该目录为空）。合在一起会让
+    // 「edge/ 那一半明明跑过了」被整条记成跳过，低估覆盖；拆开后 CI 上是
+    // 「42 通过 + 1 跳过」，本机上是「43 通过」。
+    name: 'thumbs:real-photos-decode',
+    intent: '真实相机素材：HEIC 走占位不计失败，同目录的 JPG/PNG/GIF 真实照片全部正常出图',
+    async fn(ctx) {
+      const { A, session } = ctx;
       const real = ctx.expectedForDir('real');
-      A.check(real.total >= 2, `real/ 应有真实样片，实际 ${real.total}`);
+      if (!ctx.real.ok || real.total < 2) {
+        A.skip(`real/ 真实样片不可用：${ctx.real.reason || `manifest 只登记 ${real.total} 个 real/ 条目`}`);
+      }
       A.check(real.unsupported.size >= 1, 'real/ 应有真实 HEIC 样片');
       await session.showDir('real', { expectImages: real.total });
       const rs = await sweepTiles(session, real.spec);

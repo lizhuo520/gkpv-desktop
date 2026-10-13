@@ -177,12 +177,22 @@ export default [
     async fn(ctx) {
       const { A, session } = ctx;
       const exp = ctx.expectedForDir('real');
-      await session.showDir('real', { expectImages: exp.total });
+      // `real/` 里是个人真实照片（不入库，CI 走 --no-real 时为空）。本用例要验的产品行为
+      // 是「HEIC 打开灯箱给明确提示、同目录能解码的图照常出图」，这条路径在 edge/ 上有
+      // 等价素材（fake.heic + 若干能解码的图），所以**降级到 edge/ 继续跑**，而不是跳过：
+      // 只有「真实 HEIC 与真实照片混放」这一个变体没被覆盖，用 note 明确标出来。
+      const downgraded = !ctx.real.ok || exp.total < 2;
+      const dir = downgraded ? 'edge' : 'real';
+      const expected = ctx.expectedForDir(dir);
+      if (downgraded) {
+        A.note(`real/ 真实样片不可用（${ctx.real.reason || `manifest 只登记 ${exp.total} 个 real/ 条目`}），改用 edge/ 的等价素材验证同一路径；未覆盖：真实相机 HEIC`);
+      }
+      await session.showDir(dir, { expectImages: expected.total });
       const entries = await session.entries();
       const badIdx = entries.findIndex((e) => e.unsupported);
       const goodIdx = entries.findIndex((e) => !e.unsupported);
-      A.check(badIdx >= 0, `real/ 里应有 1 张不可解码（HEIC）素材，实际 entries=${JSON.stringify(entries.map((e) => `${e.name}:${e.unsupported}`))}`);
-      A.check(goodIdx >= 0, 'real/ 里应有能解码的图片');
+      A.check(badIdx >= 0, `${dir}/ 里应有 1 张不可解码（HEIC）素材，实际 entries=${JSON.stringify(entries.map((e) => `${e.name}:${e.unsupported}`))}`);
+      A.check(goodIdx >= 0, `${dir}/ 里应有能解码的图片`);
 
       // HEIC：应给提示、不应有像素
       await openByTile(session, entries[badIdx].name, badIdx);

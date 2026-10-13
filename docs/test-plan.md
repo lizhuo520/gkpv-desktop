@@ -18,7 +18,7 @@
 | **0. 可行性核实** | 把「能不能移植」从猜测变成实测 | `docs/feasibility.md` | 关键 API（`app://` 源、OPFS、`showDirectoryPicker`）在真实 Electron 44 窗口里逐一实测通过 | ✅ 完成 |
 | **1. 仓库与骨架** | 让桌面版能起来一个独立窗口 | `desktop/main/*`、`desktop/preload/*`、`desktop/renderer/index.html`、根 `package.json`、`build/icon.ico` | 双击/命令行能开出窗口；`app://` 协议可服务资源；无控制台报错 | ✅ 完成 |
 | **2. 代码移植** | 2707 行单文件 → 模块化桌面版，**功能等价** | `desktop/renderer/lib/` 17 个模块 + `app.js` + `boot.js`；`desktop/main/scandir.cjs` 只读扫盘 | 原版每一项功能都能在新版里跑通；算法与常量未改（只搬家与拆文件） | ✅ 完成 |
-| **3. 完整测试** | 用素材、单测、真窗口 E2E 把行为钉住 | `tools/gen-fixtures.mjs`、`tests/fixtures/`（72 素材 + manifest）、`tests/unit/`（26 条）、`tests/e2e/`（42 条） | 单元测试 26/26 通过；E2E 42/42 在**真 Electron 会话**里全绿；发现的真 bug 全部修掉并有回归用例 | ✅ 完成 |
+| **3. 完整测试** | 用素材、单测、真窗口 E2E 把行为钉住 | `tools/gen-fixtures.mjs`、`tests/fixtures/`（72 素材 + manifest）、`tests/unit/`（26 条）、`tests/e2e/`（43 条） | 单元测试 26/26 通过；E2E 43 条在**真 Electron 会话**里全绿（缺 `real/` 素材的环境记 42 通过 + 1 跳过）；发现的真 bug 全部修掉并有回归用例 | ✅ 完成 |
 | **4. 打包** | 产出可分发的 Windows 产物 | `electron-builder` NSIS 安装包 + portable 免安装版；`tools/pack.mjs`；`tests/pack/` | 安装/免安装产物能启动、能开图、能扫目录；产物冒烟脚本通过 | ✅ 完成 |
 | **5. 版本管理与交付** | 用 GitHub 管版本，给出验收材料 | 仓库 `lizhuo520/gkpv-desktop`、阶段 tag、Release、`README`/`docs/acceptance.md` | 远程仓库可访问、标签与 Release 就位、验收清单逐条有证据 | 🔄 进行中 |
 | **6. 可选增强** | 文件关联、记住上次目录等 | — | — | ⛔ 本轮明确不做（用户已确认） |
@@ -40,8 +40,8 @@ tests/
 | 层 | 跑什么 | 命令 | 通过标准 |
 | --- | --- | --- | --- |
 | 素材自检 | 素材与 manifest 是否一一对应、字节是否被意外改动 | `npm run test:unit` | 结构性断言全过 |
-| 单元 | 主进程扫盘、尺寸解析、mime、内嵌预览提取、边界 | `npm run test:unit` | 25/25 |
-| 端到端 | 真窗口里的扫描/缩略图/灯箱/递归/边界目录 | `npm run test:e2e` | 全绿 |
+| 单元 | 主进程扫盘、尺寸解析、mime、内嵌预览提取、边界 | `npm run test:unit` | 26/26 |
+| 端到端 | 真窗口里的扫描/缩略图/灯箱/递归/边界目录 | `npm run test:e2e` | 有 `real/` 素材时 43/43；无素材时 42 通过 + 1 跳过，**0 失败** |
 | 打包冒烟 | `dist/` 产物启动后能扫目录、能解码 | `npm run smoke:pack` | 全绿 |
 | 全量 | 上面全部 | `npm test` | 全绿 |
 
@@ -108,7 +108,7 @@ tests/
 
 ---
 
-## 五、端到端测试（`tests/e2e/`，42 条，真 Electron 会话）
+## 五、端到端测试（`tests/e2e/`，43 条，真 Electron 会话）
 
 **为什么用真窗口**：这个应用的正确性大半在 Chromium 的解码、OPFS 缓存、虚滚动与事件时序里，
 用 jsdom 之类的模拟环境测不出真问题。
@@ -131,6 +131,35 @@ tests/
 
 **用例设计**（期望值全部从 `manifest.json` + 真实目录遍历推导，只对「至少多少」这类下界做硬编码）：
 
+### 条件覆盖：跳过与降级（不能判红，也不能静默放过）
+
+`tests/fixtures/real/` 放的是**个人真实照片**（`.gitignore` 已忽略，不进仓库），CI 用
+`npm run fixtures -- --no-real` 生成素材后该目录为空。素材缺失既不是产品回归（**判红是错的**），
+也不能当作验过了（**静默放过等于谎报覆盖**）。因此测试框架有两条明确机制：
+
+| 机制 | 什么时候用 | 表现 |
+| --- | --- | --- |
+| **跳过**（`A.skip(reason)`，抛 `SkipCase`） | 本环境**没有可断言对象**，且没有等价素材 | 单独一行 `○ 用例名` + 原因；计入「跳过」列，**不计入失败、也不计入通过**；`run.mjs` 的退出码只看失败数 —— 跳过不会让 CI 变红 |
+| **降级**（runtime 选目录） | 同一产品路径在别的目录有**等价素材** | 用例照常执行并通过，用 `A.note` 打印「未覆盖的变体是什么」 |
+
+启动横幅会先打印一行 `真实样片：N 个（覆盖成立）` 或 `不可用 —— <原因>`，判据见
+`tests/e2e/lib/fixtures.mjs` 的 `realAvailable()`：**manifest 登记**与**磁盘文件**任缺其一即认为覆盖不成立
+（manifest 有登记而磁盘没文件时，跳过反而是对的）。
+
+具体到用例：
+- `thumbs:real-photos-decode`（真实相机素材）→ **跳过**：没有真实照片时无法断言「真实 JPEG/PNG/GIF 都能解码」。
+- `thumbs:heic-placeholder-not-a-failure` 与它**故意分成两条**：前者只跑 `edge/fake.heic`，
+  它在任何环境下都能跑；合在一起会让「edge/ 那一半明明跑过了」被整条记成跳过，低估覆盖。
+- `lightbox:heic-message-others-still-work` → **降级到 `edge/`**：该用例验的是「HEIC 给提示 + 同目录能解码的图照常出图」，
+  `edge/` 有 `fake.heic` + 4 张可解码图，是等价素材；唯一没覆盖的变体是「真实相机 HEIC」，由 note 明确标出。
+
+**实测两条路径**（都在本机跑过）：
+
+| 场景 | 命令 | 结果 |
+| --- | --- | --- |
+| 本机（`D:\图片\iCloud 照片` 存在） | `npm run fixtures` + `npm run test:e2e` | **43/43 通过**，0 失败 0 跳过 |
+| 模拟 CI（无相册） | `npm run fixtures -- --no-real` + `npm run test:e2e` | **42 通过 + 1 跳过**，0 失败；退出码 0 |
+
 | 用例 | 断言要点 |
 | --- | --- |
 | 首屏与根目录卡片 | 7 个文件夹卡片；0 张图片（非递归）；计数器文案正确 |
@@ -148,6 +177,8 @@ tests/
   因此 E2E 走 `GKPV_TEST_ROOT` 注入。真实对话框需人工按验收清单第 1 项点一次。
 - E2E 的图片计数断言基于 `tests/fixtures/`，**不覆盖**真实相机 RAW（NEF/ARW 用的是合成容器）
   和 HEIC（Chromium 不解码 HEIC，本项目行为是「占位 + 计数」，两边一致）。
+- 缺少 `real/` 素材（CI、或本机没有相册）时，`thumbs:real-photos-decode` 记为**跳过**而不是通过 ——
+  「真实照片能解码」这条覆盖在那种环境下**确实没有验证过**，报告里必须能看出来（见第五节的跳过/降级机制）。
 
 ---
 

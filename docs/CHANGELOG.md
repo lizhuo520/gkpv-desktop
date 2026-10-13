@@ -24,8 +24,9 @@ EXIF 解析、RAW 处理、虚滚动、灯箱、排序筛选全部沿用原实�
   以及与渲染层解析器**交叉校验**（两套独立实现对同一批素材必须给出相同答案）。
 - **测试态注入接口**：仅当主进程以 `GKPV_TEST_MODE=1` 启动时，预加载脚本暴露
   `gkpv.test.setFolder(path)`；生产构建里被静态消除，普通用户碰不到。
-- **完整测试体系**：72 个测试素材（含真实样本与真实 HEIC）+ 26 条单元测试 + 42 条真 Electron
-  窗口的端到端测试 + 打包产物冒烟。
+- **完整测试体系**：72 个测试素材（含真实样本与真实 HEIC）+ 26 条单元测试 + 43 条真 Electron
+  窗口的端到端测试 + 打包产物冒烟。素材不可用（如 CI 上没有 `real/` 真实照片）时，
+  依赖它的用例记「跳过」并打印原因 —— **不计失败，也不计通过**，覆盖缺口如实留在报告里。
 - **GIF 素材的独立验证**（`tests/unit/gif.test.mjs`）：项目里唯一一份手写编码器产出的素材，
   用**按规范另写一遍的解码器**逐点校验，并与冻结的 Pillow 参照物跨编码器比对
   （`npm run gif-reference` 可逐字节复现参照物）。
@@ -55,6 +56,14 @@ EXIF 解析、RAW 处理、虚滚动、灯箱、排序筛选全部沿用原实�
   建 Blob 时没带 MIME，`type === ''` 的 SVG Blob 塞进 `<img>` 后 Chromium 直接
   `onerror`（报「SVG 解码失败」）。界面路径一直正常，因为 `getFileFor()` 传了
   `guessMime(name)`——同一份文件两条路径一个有一个没有。现在 `guessMime` 导出并两处共用。
+- **点子目录后面包屑变了、网格还是根目录内容**：主进程的扫描入口只认 `src.root`，
+  渲染层导航时 `state.currentPath` 根本没参与扫描。现在 `scanSource()` 带 `subPath`，
+  经 `normalizeSub()` + `sources.safeJoin()` 做目录穿越防护，并有 E2E 断言
+  「进入 `basic/` 后磁贴数与 `diagnostics().dir` 都指向该目录」。
+- **RAW 缩略图拿整个容器当图片解**：`rawPreviewOf()` 在条目带扫描期预览时仍走
+  「读整份文件」的通道，于是把 `.CR2`/`.DNG` 容器整个交给 `createImageBitmap()`，
+  报 `The source image could not be decoded.`（5 张 RAW 里 2 张失败）。现在改用扫描期
+  已提取的内嵌 JPEG（`previewFromDataUrl()`），CR2/DNG 也能出图。
 
 ### 说明（非退化，行为与原版一致）
 

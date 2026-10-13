@@ -30,8 +30,8 @@ import {
   resetDir,
   resolveElectron,
 } from './lib/paths.mjs';
-import { launchSession, electronProcesses, makeAssertions } from './lib/harness.mjs';
-import { loadManifest, dirExpectation, recursiveExpectation, summarize, scanDir } from './lib/fixtures.mjs';
+import { launchSession, electronProcesses, makeAssertions, SkipCase } from './lib/harness.mjs';
+import { loadManifest, dirExpectation, recursiveExpectation, summarize, scanDir, realAvailable } from './lib/fixtures.mjs';
 
 const TMP_DIR = path.join(E2E_DIR, '.tmp');
 const ARTIFACTS_DIR = path.resolve(E2E_DIR, '..', 'artifacts');
@@ -52,6 +52,7 @@ const CASE_FILES = [
 const ASCII = process.env.GKPV_E2E_ASCII === '1';
 const PASS = ASCII ? 'OK  ' : '✔';
 const FAIL = ASCII ? 'FAIL' : '✖';
+const SKIP = ASCII ? 'SKIP' : '○';
 const CASE_TIMEOUT_MS = Number(process.env.GKPV_E2E_CASE_TIMEOUT_MS || 300000);
 
 const out = (s = '') => process.stdout.write(`${s}\n`);
@@ -194,6 +195,7 @@ async function main() {
   const summary = summarize(manifest);
   const recursiveExp = recursiveExpectation(manifest);
   const top = scanDir(FIXTURES_DIR);
+  const realStatus = realAvailable(manifest);
 
   out(`执行命令   : node tests/e2e/run.mjs${process.argv.slice(2).length ? ` ${process.argv.slice(2).join(' ')}` : ''}`);
   out(`node       : ${process.version}   平台: ${process.platform}/${process.arch}`);
@@ -202,6 +204,9 @@ async function main() {
   out(`素材       : ${FIXTURES_DIR}`);
   out(`             顶层 ${summary.topFolders.length} 个文件夹 / ${summary.topImages.length} 张图；递归可见图片 ${recursiveExp.total} 张`);
   out(`             目录树：${summary.treeFolders} 个文件夹 / ${summary.treeImages} 个图片文件；清单生成于 ${summary.generatedAt}`);
+  out(
+    `             真实样片：${realStatus.ok ? `${realStatus.count} 个（覆盖成立）` : `不可用 —— ${realStatus.reason}（依赖它的用例会记为「跳过」）`}`,
+  );
   out(`userData   : ${USER_DATA_DIR}<会话名>（每轮重置，隔离 localStorage/OPFS/单实例锁）`);
   out(`用例       : ${selected.length}/${cases.length}${opt.filter ? `（filter=「${opt.filter}」）` : ''}，单条超时 ${Math.round(opt.timeout / 1000)}s`);
   if (opt.list) {
@@ -241,6 +246,7 @@ async function main() {
     manifest,
     expected: recursiveExp,
     expectedForDir: (rel) => dirExpectation(manifest, rel),
+    real: realStatus,
     summarize: () => summary,
     async sessionFor(key) {
       if (sessions.has(key)) {
@@ -260,6 +266,7 @@ async function main() {
   // ---------- 串行执行 ----------
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const results = [];
+  const skipped = [];
   const t0 = Date.now();
   let interrupted = false;
   const onSignal = async () => {
@@ -300,7 +307,14 @@ async function main() {
         if (timer) clearTimeout(timer);
       }
       const ms = Date.now() - started;
-      if (err) {
+      if (err && (err instanceof SkipCase || err.skipped)) {
+        // 跳过不等于通过：单独一行、单独计数，且必须带上原因（否则就是无声丢覆盖）
+        out(`  ${SKIP} ${c.name}  (${Math.round(ms / 1000)}s)`);
+        out(`      跳过：${(err && err.message) || err}`);
+        for (const n of A.notes) out(`      · ${n}`);
+        skipped.push({ name: c.name, reason: String((err && err.message) || err) });
+        results.push({ ...c, ok: true, skipped: true, ms, reason: String((err && err.message) || err), notes: A.notes, warnings: A.warnings });
+      } else if (err) {
         // 上面那行「… [file] name」是进行中的滚动行，失败时补一条正式结果行
         out(`  ${FAIL} ${c.name}  (${Math.round(ms / 1000)}s)`);
         out(`      原因：${(err && err.message) || err}`);
@@ -333,13 +347,22 @@ async function main() {
   }
 
   const failed = results.filter((r) => !r.ok);
-  const passed = results.length - failed.length;
+  const passed = results.filter((r) => r.ok && !r.skipped).length;
   const secs = Math.round((Date.now() - t0) / 1000);
   const procs = electronProcesses();
 
   out('');
   out('='.repeat(78));
-  out(`汇总：${results.length} 个用例，通过 ${passed}，失败 ${failed.length}，用时 ${Math.floor(secs / 60)}m${secs % 60}s`);
+  out(
+    `汇总：${results.length} 个用例，通过 ${passed}，失败 ${failed.length}` +
+      (skipped.length ? `，跳过 ${skipped.length}` : '') +
+      `，用时 ${Math.floor(secs / 60)}m${secs % 60}s`,
+  );
+  if (skipped.length) {
+    out('');
+    out('跳过的用例（本环境缺少覆盖条件，不计入失败，也不计入通过）：');
+    for (const s of skipped) out(`  ${SKIP} ${s.name}  →  ${s.reason}`);
+  }
   if (failed.length) {
     out('');
     out('失败用例：');
@@ -347,7 +370,7 @@ async function main() {
     out('');
     out(`现场目录：${path.join(ARTIFACTS_DIR, stamp)}`);
   } else {
-    out('全部通过 ✅');
+    out(skipped.length ? `全部通过 ✅（${passed}/${results.length} 通过，${skipped.length} 条跳过 —— 跳过的覆盖缺口见上）` : '全部通过 ✅');
   }
   out(`残留 electron.exe 进程：${procs.count === -1 ? '统计失败' : procs.count} 个（机器上可能还有其它 Electron 程序）`);
   out('='.repeat(78));
@@ -367,12 +390,25 @@ async function main() {
           electron: packageVersion('electron'),
           playwrightCore: packageVersion('playwright-core'),
           fixtures: summary,
+          realSamples: realStatus,
           recursiveImages: recursiveExp.total,
           total: results.length,
           passed,
           failed: failed.length,
+          skipped: skipped.length,
+          skippedCases: skipped,
           seconds: secs,
-          cases: results.map((r) => ({ file: r.file, name: r.name, ok: r.ok, ms: r.ms, error: r.error || null, notes: r.notes, warnings: r.warnings })),
+          cases: results.map((r) => ({
+            file: r.file,
+            name: r.name,
+            ok: r.ok,
+            skipped: !!r.skipped,
+            skipReason: r.reason || null,
+            ms: r.ms,
+            error: r.error || null,
+            notes: r.notes,
+            warnings: r.warnings,
+          })),
         },
         null,
         2,

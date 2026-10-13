@@ -189,4 +189,25 @@ export function summarize(manifest) {
   };
 }
 
+/**
+ * `real/` 里的真实样片是否可用。
+ *
+ * 那些文件是**个人照片**，不入库（见 .gitignore），CI 上用 `--no-real` 生成素材后
+ * `real/` 目录是空的。依赖它们的用例必须走 `A.skip()` 明确报告，而不是靠放宽断言
+ * 假装通过 —— 本地有素材时仍要严格断言，否则等于悄悄失去这部分覆盖。
+ *
+ * 判据同时看磁盘与 manifest：只要有一边缺了，就认为覆盖不成立
+ * （manifest 有登记但磁盘没文件 = 素材被外部删掉，这时跳过反而是对的，
+ *  因为「文件不存在」本身不是产品行为的问题）。
+ */
+export function realAvailable(manifest) {
+  const rels = manifestEntriesIn(manifest, 'real').map((f) => f.rel);
+  if (!rels.length) return { ok: false, reason: 'manifest 里没有 real/ 条目（生成素材时用了 --no-real？）', count: 0 };
+  const missing = rels.filter((rel) => !fs.existsSync(path.join(FIXTURES_DIR, rel)));
+  if (missing.length) {
+    return { ok: false, reason: `manifest 登记了 ${rels.length} 个 real/ 文件，磁盘上缺 ${missing.length} 个（${missing.slice(0, 3).join(', ')}…）`, count: rels.length };
+  }
+  return { ok: true, reason: '', count: rels.length };
+}
+
 export const FIXTURES = FIXTURES_DIR;

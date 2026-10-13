@@ -531,6 +531,22 @@ export async function openLightboxAt(session, index) {
  * 断言
  * ================================================================== */
 
+/**
+ * 「这个用例在本环境下没有覆盖条件」——不是失败，也绝不能算通过。
+ *
+ * 典型场景：`real/` 里的真实样片是个人照片、不入库，CI 用 `--no-real`
+ * 生成素材后该目录为空，依赖它的用例没有可断言的对象。
+ * 唯一诚实的处理是**报告跳过并说明原因**：既不能判红（环境没素材不是回归），
+ * 也不能判绿（那等于谎报覆盖）。运行器会把它单列成「跳过」计数。
+ */
+export class SkipCase extends Error {
+  constructor(reason) {
+    super(reason);
+    this.name = 'SkipCase';
+    this.skipped = true;
+  }
+}
+
 export function makeAssertions() {
   const notes = [];
   const warnings = [];
@@ -553,6 +569,10 @@ export function makeAssertions() {
     },
     warn(msg) {
       warnings.push(String(msg));
+    },
+    /** 本环境缺少覆盖条件：抛出让运行器记为「跳过」，并带着原因上报。 */
+    skip(reason) {
+      throw new SkipCase(String(reason));
     },
   };
 }

@@ -42,7 +42,7 @@ npm.cmd install          # 国内网络慢可加镜像，见 tools/pack.mjs 里�
 npm.cmd run fixtures     # 生成测试素材（72 个，可重复生成）
 npm.cmd start            # 起开发窗口
 npm.cmd run test:unit    # 单元测试（26 条）
-npm.cmd run test:e2e     # 端到端（会真的开 Electron 窗口）
+npm.cmd run test:e2e     # 端到端（43 条，会真的开 Electron 窗口）
 npm.cmd test             # 上面两项全跑
 npm.cmd run pack         # 打包出 NSIS + portable
 npm.cmd run smoke:pack   # 打包产物冒烟

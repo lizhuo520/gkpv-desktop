@@ -126,7 +126,7 @@
 | 项 | 命令 | 结果 |
 | --- | --- | --- |
 | 单元测试 | `npm.cmd run test:unit` | **26 / 26 通过**（`node --test`，约 0.2s；`real/` 不在磁盘时，涉及它的断言跳过并打印原因） |
-| 端到端测试 | `npm.cmd run test:e2e` | **42 / 42 通过**（真 Electron 44 窗口，约 45s；复现步骤见 `docs/test-plan.md` 第九节） |
+| 端到端测试 | `npm.cmd run test:e2e` | **43 / 43 通过**（真 Electron 44 窗口，约 75s；缺 `real/` 素材的环境记 42 通过 + 1 跳过、0 失败；复现步骤见 `docs/test-plan.md` 第九节） |
 | 打包冒烟 | `npm.cmd run smoke:pack` | **8 / 8 通过**（跑 `dist/win-unpacked/GKP Viewer.exe`：开窗、`app://` 源、解码出 400×300 缩略图、关窗无残留进程） |
 | 测试素材校验 | 单测前 3 条 | 72 个素材 sha256 全一致（`real/` 不入库时按 66 个计） |
 | GIF 跨编码器校验 | `npm.cmd run gif-reference:check` | 冻结的 Pillow 参照物 273 B / `6a96068a…` 就位 |
