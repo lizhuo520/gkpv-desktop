@@ -115,8 +115,12 @@ EXIF 解析、RAW 处理、虚滚动、灯箱、排序筛选全部沿用原实�
 ### 说明
 
 - 2.0.0 的 tag 与它的 Release **保留不动**（它如实记录了当时的状态与产物）；2.0.1 的产物
-  在 Release 页另附，SHA256 见 `docs/acceptance.md` 第十节。
+  在 [`v2.0.1` Release](https://github.com/lizhuo520/gkpv-desktop/releases/tag/v2.0.1) 另附，
+  SHA256 见 `docs/acceptance.md` 第十节。
 - 除图标与版本信息外，2.0.1 与 2.0.0 **产品代码完全一致**（本次只改了打包配置、版本号与测试脚本）。
+- 持续集成在 `a77fee1`（2.0.1 的最终提交）上全绿：[Actions run #8](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38435619404)
+  —— 单元 26/26、端到端 42 通过 + 1 跳过、产物冒烟 **10/10**（也就是说 CI 上构建出来的
+  exe 图标与版本信息同样是对的，不只在开发机上是）。
 
 ---
 
