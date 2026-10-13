@@ -55,6 +55,14 @@ coverage/
 # `.acp-*` 是排查问题时用的一次性探针（跑真 Electron、看协议/解码行为），
 # 结论都已写回源码注释与 docs/，脚本本身没有复用价值，不入库。
 .acp-*
+# 提交信息临时文件：用 `git commit -F <file>` 写多行中文提交信息时产生。
+# 一律用 write 工具生成（pwsh 的 Set-Content 会写 BOM，会让提交标题多一个不可见字符），
+# 提交完就该删掉；这里兜底防止误入库。
+.msg-*.txt
+.commit-msg*.txt
+# 查 CI / 发 Release 的一次性脚本（令牌现取现用，不落盘）
+.ci-*.mjs
+.rel-*.mjs
 .cache/
 .tmp-*
 

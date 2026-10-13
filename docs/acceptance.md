@@ -13,7 +13,7 @@
 
 | # | 怎么点 | 通过标准 | 实测 |
 | --- | --- | --- | --- |
-| 1.1 | 双击 `GKP Viewer-2.0.0-portable.exe` | 开出**独立应用窗口**（不是浏览器标签页），标题为「GKP 照片查看器」，无地址栏、无书签栏 | ✅ 已实测（4s 开窗，标题正确；脚本化验证见第十节） |
+| 1.1 | 双击 `GKP Viewer-2.0.1-portable.exe` | 开出**独立应用窗口**（不是浏览器标签页），标题为「GKP 照片查看器」，无地址栏、无书签栏 | ✅ 已实测（6.5s 开窗，标题正确；脚本化验证见第十节） |
 | 1.2 | 跑安装版：双击 setup → 选目录 → 安装 | 桌面与开始菜单出现「GKP 照片查看器」快捷方式；双击能启动 | ✅ 已实测（静默安装 7s / 75 文件；两个快捷方式都创建成功；装好的 exe 2s 开窗。图形化向导的分步界面本身仍是人工项） |
 | 1.3 | 二次启动（窗口已开着时再双击图标） | **不新开进程**，聚焦已有窗口（单实例锁生效） | ✅ 已实测（带窗口的进程数仍为 1，第二次启动的进程自行退出） |
 | 1.4 | 看窗口图标（任务栏 + 标题栏） | 显示 gkpv 图标，不是 Electron 默认图标 | ✅ 已实测（脚本化：`dist/win-unpacked/GKP Viewer.exe` 里能查到 `build/icon.ico` 的图标字节，且版本信息为 `ProductName=GKP Viewer` / `CompanyName=lizhuo520` / `FileVersion=2.0.1`；同一检查对三个产物 exe 的图标做了 32×32 像素比对，差异都只有抗锯齿的 330/1024。**2.0.0 的产物是错的**——2.0.1 修正） |
@@ -130,11 +130,11 @@
 | 打包冒烟 | `npm.cmd run smoke:pack` | **10 / 10 通过**（跑 `dist/win-unpacked/GKP Viewer.exe`：内嵌图标是我们自己的、版本信息里没有 Electron 的 `GitHub, Inc.`、开窗、`app://` 源、解码出 400×300 缩略图、关窗无残留进程） |
 | 测试素材校验 | 单测前 3 条 | 72 个素材 sha256 全一致（`real/` 不入库时按 66 个计） |
 | GIF 跨编码器校验 | `npm.cmd run gif-reference:check` | 冻结的 Pillow 参照物 273 B / `6a96068a…` 就位 |
-| 持续集成 | [Actions run #4](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38429878730) | **success**（跑在最终提交 `0bb15b1`）：装依赖 → 生成素材（`--no-real`）→ 单元 26/26 → 端到端 42 通过 + 1 跳过、0 失败 → 打包（解包目录）→ 产物冒烟 8/8。首轮 [run #1](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38419823934) 曾在 CI 上暴露两条「假红」（依赖不入库的个人相册素材），修复见 `docs/CHANGELOG.md` |
+| 持续集成 | [Actions run #7](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38433410819) | **success**（跑在最终提交 `8b555c0`，即 2.0.1）：装依赖 → 生成素材（`--no-real`）→ 单元 26/26 → 端到端 42 通过 + 1 跳过、0 失败 → 打包（解包目录）→ 产物冒烟 **10/10**（含两条产物级断言，说明 CI 构建出来的 exe 图标与版本信息也是对的）。更早的 [run #4](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38429878730) 是 8 项冒烟的版本；首轮 [run #1](https://github.com/lizhuo520/gkpv-desktop/actions/runs/38419823934) 曾在 CI 上暴露两条「假红」（依赖不入库的个人相册素材），修复见 `docs/CHANGELOG.md` |
 | 安装/卸载流程 | `setup.exe /S /D=<临时目录>` → 启动 → 再启动 → `Uninstall GKP Viewer.exe /S` | **通过**（见下表） |
 | 发布产物 | [Release v2.0.0](https://github.com/lizhuo520/gkpv-desktop/releases/tag/v2.0.0) | 两个资产已上传：`GKP.Viewer-2.0.0-setup.exe` 106.3 MB、`GKP.Viewer-2.0.0-portable.exe` 106.1 MB；tag `v2.0.0` → `539d759`。**注意**：2.0.0 的产物内嵌的是 Electron 默认图标（见 `docs/CHANGELOG.md` 的 2.0.1 条目），要用图标正确的版本请下 2.0.1 |
-| 发布产物（2.0.1） | [Release v2.0.1](https://github.com/lizhuo520/gkpv-desktop/releases/tag/v2.0.1) | `GKP.Viewer-2.0.1-setup.exe` 106.3 MB、`GKP.Viewer-2.0.1-portable.exe` 106.1 MB |
-| 全新克隆复现 | `git clone` → `npm ci` → `fixtures --no-real` → 单元 → 端到端 → `pack` → `smoke:pack` | **通过**：全链路在临时目录里从零复现（单元 26/26、端到端 42+1 跳过、打包 29.4s、冒烟 8/8）。这一步抓出「electron 二进制惰性下载 + 受限网络」的真坑，见 `docs/test-plan.md` 第十节 |
+| 发布产物（2.0.1） | [Release v2.0.1](https://github.com/lizhuo520/gkpv-desktop/releases/tag/v2.0.1) | `GKP.Viewer-2.0.1-setup.exe` 106.3 MB、`GKP.Viewer-2.0.1-portable.exe` 106.1 MB，两个资产 state=uploaded；tag `v2.0.1` → `8b555c0` |
+| 全新克隆复现 | `git clone` → `npm ci` → `fixtures --no-real` → 单元 → 端到端 → `pack` → `smoke:pack` | **通过**：全链路在临时目录里从零复现（单元 26/26、端到端 42+1 跳过、打包 29.4s、冒烟 8/8 —— 冒烟当时是 8 项，现为 10 项）。这一步抓出「electron 二进制惰性下载 + 受限网络」的真坑，见 `docs/test-plan.md` 第十节 |
 
 ### 安装包与便携版的实测记录（对应第一节 1.1~1.3、1.6 与第八节）
 
@@ -149,7 +149,7 @@
 | 单实例锁（1.3） | 窗口已开着时再启动一次 | ✔ 带窗口的进程数仍为 **1**，第二次启动的进程立刻退出（聚焦已有窗口） |
 | 关窗退出（1.6） | 关掉窗口 | ✔ 残留 `GKP Viewer.exe` 进程 **0 个** |
 | 静默卸载（8.1/8.2） | `Uninstall GKP Viewer.exe /S` | 退出码 0；安装目录**已消失**，桌面与开始菜单快捷方式**都已清除**；`%APPDATA%\GKP Viewer` 按设计保留 |
-| 便携版（1.1） | 直接跑 `GKP Viewer-2.0.0-portable.exe` | ✔ 4s 开出窗口，标题「GKP 照片查看器」；关掉后无残留进程 |
+| 便携版（1.1） | 直接跑 `GKP Viewer-2.0.1-portable.exe` | ✔ 6.5s 开出窗口（pid=30128，hwnd=1115066），标题「GKP 照片查看器」；关掉后无残留进程 |
 
 > 便携版是自解压壳，会用**新的进程**去跑内层 exe，所以 `tests/pack/smoke-packaged.mjs` 没法直接接管它
 > （Playwright 需要一开始就掌握进程）。上面改用「枚举新出现的进程 + 看 `MainWindowHandle`」来验证。
@@ -172,6 +172,10 @@
 2.0.0 的产物（已被 2.0.1 取代，仅作记录）：`setup.exe` = `AE0F6F5EDEB79B8196CD8607EDC6A85FC1974B0AB820DFAE3C5D5AFEA552E643`、
 `portable.exe` = `56C76F115899A9F2DE0A700AACF9D455FBCE7E4AD8E3D592963234D0986E779A`。
 （GitHub 上传资产时会把文件名里的空格替换成 `.`，所以远端名是 `GKP.Viewer-…`。）
+
+> 只有 2.0.1 的产物是完整的：2.0.0 的 exe 里内嵌的是 Electron 默认图标、版本资源写着
+> `ProductName=Electron` / `CompanyName=GitHub, Inc.`（原因与修复见 `docs/CHANGELOG.md`
+> 的 2.0.1 条目）。两个 Release 都保留，如实记录当时的产物。
 
 **已知未覆盖**（不谎报）：真实机型未压缩 RAW 样片、HEIC 真实解码（Chromium 不支持）、
 原生文件夹对话框（人工项 2.1）、macOS/Linux、超大图库（> 20000 张，代码有截断提示但未实测）、
