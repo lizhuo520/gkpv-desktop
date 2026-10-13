@@ -1,0 +1,12 @@
+{
+  "name": "gkpv-desktop",
+  "productName": "GKP Viewer",
+  "version": "2.0.0",
+  "description": "GKP 照片查看器桌面版 —— 面向摄影师本地图库的快速浏览工具（缩略图虚滚动 / 文件夹预览 / 排序筛选 / 灯箱查看 / RAW 内嵌预览）",
+  "main": "main/main.cjs",
+  "author": "lizhuo520",
+  "license": "MIT",
+  "private": true,
+  "type": "commonjs",
+  "//": "本文件只描述「应用本身」，依赖与打包配置统一放在仓库根 package.json（单一 lockfile）。"
+}

@@ -1,0 +1,33 @@
+{
+  "name": "gkpv-desktop",
+  "version": "2.0.0",
+  "private": true,
+  "description": "gkpv 照片浏览器的 Electron 桌面版：从零依赖单文件网页移植而来，保留全部原有功能并独立成窗口",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "electron desktop",
+    "dev": "electron desktop --dev",
+    "fixtures": "node tools/gen-fixtures.mjs",
+    "samples": "node tools/capture-samples.mjs",
+    "samples:check": "node tools/capture-samples.mjs --check",
+    "gif-sample": "node tools/make-gif-sample.mjs",
+    "gif-reference": "node tools/make-gif-reference.mjs",
+    "gif-reference:check": "node tools/make-gif-reference.mjs --check",
+    "test:unit": "node --test \"tests/unit/*.test.mjs\"",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "test": "npm run test:unit && npm run test:e2e",
+    "icon": "node tools/gen-icon.mjs",
+    "pack": "node tools/pack.mjs",
+    "pack:dir": "node tools/pack.mjs --dir",
+    "smoke:pack": "node tests/pack/smoke-packaged.mjs"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "playwright-core": "^1.64.0"
+  }
+}

@@ -1,0 +1,65 @@
+# electron-builder 配置（专用文件，不带 .json 后缀 → 按 YAML 解析）
+#
+# 为什么单独一个文件，而不放在 package.json 的 "build" 字段里：
+#   electron-builder 26 在 `--config <path>` 下把参数当成**裸配置对象**解析，
+#   传 package.json 会因为 `name`/`version`/`scripts`/`devDependencies` 这些
+#   正常字段而报「unknown property」直接失败（踩过一次）。
+#   独立配置文件既避开了这个坑，也让打包参数有唯一的权威来源。
+#   依赖仍然只有仓库根一份，不碰单一 lockfile 的约定。
+
+appId: com.lizhuo520.gkpv
+productName: GKP Viewer
+copyright: Copyright (c) 2025 lizhuo520
+
+directories:
+  # 应用本体在 desktop/，产物出到 dist/，图标等构建资源在 build/
+  app: desktop
+  output: dist
+  buildResources: build
+
+# 只把运行时真正需要的东西打进 asar。
+# 注意不含 node_modules：本应用没有运行时依赖（开发依赖只在仓库根，供测试与打包用），
+# 所以产物里不该出现任何第三方模块——这也是原项目「零依赖」特性的延续。
+files:
+  - main/**/*
+  - preload/**/*
+  - renderer/**/*
+  - package.json
+
+# 应用入口在 desktop/main/main.cjs，但 packaged package.json 的 main 字段
+# 需要在打包时被覆盖成相对 app 根的路径（desktop/package.json 里已是同样的值，
+# 这里显式再写一遍，避免以后有人改错那一处而打出起不来的包）。
+extraMetadata:
+  main: main/main.cjs
+
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: icon.ico
+  artifactName: ${productName}-${version}-${arch}-${target}.${ext}
+  # 本轮明确不做代码签名：跳过签名与 rcedit 改可执行文件，
+  # 免得在没有证书的环境里卡在 winCodeSign 下载上（首次运行会出现
+  # 「未知发布者」提示，这是预期行为，已在 README 与验收清单里说明）。
+  signAndEditExecutable: false
+  verifyUpdateCodeSignature: false
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: GKP 照片查看器
+  # 卸载时保留用户数据：图库缩略图缓存与界面偏好都在这里，
+  # 重装后应该还在，不该被卸载顺手删掉。
+  deleteAppDataOnUninstall: false
+  artifactName: ${productName}-${version}-setup.${ext}
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+  unicode: true

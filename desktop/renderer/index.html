@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!--
+  GKP 照片查看器（桌面版）
+  DOM 结构与 gkpv.html 保持一一对应：样式表也是从原文件整段抽出来的，
+  所以这里的 id / class 不能随手改名 —— renderer/lib/*.js 直接按这些选择器取节点。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'">
+  <title>GKP 照片查看器</title>
+  <link rel="stylesheet" href="styles/app.css">
+</head>
+<body>
+
+<!-- Landing -->
+<div id="landing">
+  <h1>gkpv</h1>
+  <p>轻量照片查看器 —— 完全在本地浏览你的照片库。</p>
+  <button id="openBtn">打开文件夹</button>
+</div>
+
+<!-- Toolbar -->
+<div id="toolbar" style="display:none">
+  <span class="brand">gkpv</span>
+  <button id="openBtnToolbar" title="打开其他文件夹">打开</button>
+  <div id="breadcrumbs"></div>
+  <div class="layout-group">
+    <button data-layout="grid">网格</button>
+    <button data-layout="justified" class="active">自适应</button>
+  </div>
+  <div class="size-group">
+    <button data-size="sm">S</button>
+    <button data-size="md" class="active">M</button>
+    <button data-size="lg">L</button>
+  </div>
+  <select id="sortSelect" title="排序方式">
+    <option value="name-asc">名称 A–Z</option>
+    <option value="name-desc">名称 Z–A</option>
+    <option value="date-new">最新</option>
+    <option value="date-old">最旧</option>
+  </select>
+  <button id="recursiveBtn" title="包含所有子文件夹里的图片">子文件夹：关</button>
+  <button id="clearCacheBtn" title="清空缩略图缓存">清空缓存</button>
+  <span id="counter"></span>
+</div>
+
+<!-- Loading -->
+<div id="loading"><div class="spinner"></div>正在扫描目录…</div>
+
+<!-- Gallery -->
+<div id="gallery"></div>
+
+<!-- Card Tooltip -->
+<div id="cardTooltip" class="card-tooltip"></div>
+
+<!-- Lightbox -->
+<div id="lightbox">
+  <button class="close-btn" title="关闭 (Esc)">&times;</button>
+  <button class="info-btn" title="图片信息 (I)">&#9432;</button>
+  <div id="exifPanel" class="exif-panel"></div>
+  <button class="nav-btn nav-prev" title="上一张 (←)">&#8249;</button>
+  <button class="nav-btn nav-next" title="下一张 (→)">&#8250;</button>
+  <img id="lbImgPrev" src="" alt="" draggable="false">
+  <img id="lbImg" src="" alt="" draggable="false">
+  <div id="lbZoom"></div>
+  <div id="lbMsg" class="lb-msg"></div>
+  <div class="info" id="lbInfo"></div>
+</div>
+
+<script type="module" src="./boot.js"></script>
+
+</body>
+</html>

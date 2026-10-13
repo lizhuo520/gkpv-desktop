@@ -1,0 +1,81 @@
+name: test
+
+# 什么时候跑：
+#   - push 到 main / 任何 feature 分支
+#   - 任何 PR
+#   - 手动触发（Actions 页面点 Run workflow）
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# 同一分支上新的 push 会取消上一次还在跑的测试，省额度也省等待。
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------------------------------------
+  # 单个 job 跑全部测试：单元 + 端到端 + 打包冒烟。
+  #
+  # 为什么不分 job：E2E 与打包冒烟都需要「已安装依赖的 Electron 二进制」，
+  # 拆开会把 110MB 的 Electron 下载重复三遍，而这是最慢的一步。
+  # ------------------------------------------------------------------
+  windows:
+    name: Windows / Node 24
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      # Electron 二进制与打包资源都从 npmmirror 拉，避免 CI 上直连 github release 超时。
+      - name: 安装依赖
+        env:
+          ELECTRON_MIRROR: https://registry.npmmirror.com/-/binary/electron/
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://registry.npmmirror.com/-/binary/electron-builder-binaries/
+        run: npm ci
+
+      # 素材是可重复生成的，但生成过程含真实编码器样本；CI 上重建一遍，
+      # 顺便验证「生成脚本本身还能跑」这件事没有随代码改动而失效。
+      #
+      # `--no-real`：tests/fixtures/real/ 放的是本机相册复制的**真实个人照片**，
+      # 不入库（见 .gitignore），CI 上也不存在 → 明确不要真实样片。
+      # 依赖它的测试会自动跳过并打印原因（不谎报覆盖）。
+      - name: 生成测试素材
+        run: npm run fixtures -- --no-real
+
+      - name: 单元测试
+        run: npm run test:unit
+
+      # E2E 会真的开 Electron 窗口。GitHub 的 Windows runner 有桌面会话，
+      # 可以跑 GUI；失败时把截图/日志作为产物上传，方便定位。
+      - name: 端到端测试
+        run: npm run test:e2e
+
+      - name: 上传 E2E 失败现场
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: |
+            tests/artifacts/
+            tests/e2e/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: 打包（解包目录）
+        env:
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://registry.npmmirror.com/-/binary/electron-builder-binaries/
+        run: npm run pack:dir
+
+      - name: 打包产物冒烟
+        run: npm run smoke:pack
